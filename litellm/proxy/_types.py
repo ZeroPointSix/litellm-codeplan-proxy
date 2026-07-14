@@ -2569,6 +2569,7 @@ class UserAPIKeyAuth(LiteLLM_VerificationTokenView):  # the expected response ob
     request_route: Optional[str] = None
     is_session_token: bool = False
     budget_reservation: Optional[Dict[str, Any]] = Field(default=None, exclude=True)
+    code_plan_reservation: dict[str, Any] | None = Field(default=None, exclude=True)
     budget_throttle_pct: Optional[float] = Field(default=None, exclude=True)
     user: Optional[Any] = None  # Expanded user object when expand=user is used
     created_by_user: Optional[Any] = None  # Expanded created_by user when expand=user is used

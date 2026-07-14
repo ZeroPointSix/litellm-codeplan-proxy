@@ -2292,7 +2292,7 @@ async def _run_centralized_common_checks(
     # else branch. After the for-loop above, the only BaseException that
     # can still appear here is HTTPException (other listed re-raises were
     # propagated; non-listed exceptions were already swallowed to None).
-    team_object: Optional[LiteLLM_TeamTableCachedObj]
+    team_object: LiteLLM_TeamTableCachedObj | None
     if isinstance(team_result, BaseException):
         # Token-derived fallback only valid when a team_id is set;
         # _team_obj_from_token asserts that precondition.
@@ -2301,7 +2301,7 @@ async def _run_centralized_common_checks(
         team_object = team_result
 
     user_object: Optional[LiteLLM_UserTable] = None if isinstance(user_result, BaseException) else user_result
-    project_object: Optional[LiteLLM_ProjectTableCachedObj] = (
+    project_object: LiteLLM_ProjectTableCachedObj | None = (
         None if isinstance(project_result, BaseException) else project_result
     )
     end_user_object: Optional[LiteLLM_EndUserTable] = (
@@ -2374,20 +2374,73 @@ async def _run_centralized_common_checks(
         project_object=project_object,
     )
 
-    await _reserve_budget_after_common_checks(
+    await _reserve_code_plan_after_common_checks(
         user_api_key_auth_obj=user_api_key_auth_obj,
         request_data=request_data,
         route=route,
-        llm_router=llm_router,
         team_object=team_object,
-        user_object=user_object,
-        end_user_id=end_user_id,
-        end_user_object=end_user_object,
-        prisma_client=prisma_client,
+        project_object=project_object,
         user_api_key_cache=user_api_key_cache,
-        proxy_logging_obj=proxy_logging_obj,
-        skip_budget_checks=skip_budget_checks,
         general_settings=general_settings,
+    )
+
+    try:
+        await _reserve_budget_after_common_checks(
+            user_api_key_auth_obj=user_api_key_auth_obj,
+            request_data=request_data,
+            route=route,
+            llm_router=llm_router,
+            team_object=team_object,
+            user_object=user_object,
+            end_user_id=end_user_id,
+            end_user_object=end_user_object,
+            prisma_client=prisma_client,
+            user_api_key_cache=user_api_key_cache,
+            proxy_logging_obj=proxy_logging_obj,
+            skip_budget_checks=skip_budget_checks,
+            general_settings=general_settings,
+        )
+    except Exception:
+        if user_api_key_auth_obj.code_plan_reservation is not None:
+            from litellm.proxy.code_plan import release_code_plan_reservation
+
+            try:
+                await release_code_plan_reservation(user_api_key_auth_obj.code_plan_reservation)
+            except (RuntimeError, TypeError, ValueError):
+                verbose_proxy_logger.exception(
+                    "Failed to release Code Plan reservation after budget reservation failed"
+                )
+        raise
+
+
+async def _reserve_code_plan_after_common_checks(
+    user_api_key_auth_obj: UserAPIKeyAuth,
+    request_data: dict,
+    route: str,
+    team_object: Optional[LiteLLM_TeamTableCachedObj],
+    project_object: Optional[LiteLLM_ProjectTableCachedObj],
+    user_api_key_cache: UserApiKeyCache,
+    general_settings: dict,
+) -> None:
+    user_api_key_auth_obj.code_plan_reservation = None
+    if general_settings.get("disable_code_plan_gateway") is True or general_settings.get("disable_code_plan") is True:
+        return
+
+    from litellm.proxy.code_plan import CodePlanAuthService, CodePlanQuotaManager
+
+    projection = CodePlanAuthService.validate_request(
+        valid_token=user_api_key_auth_obj,
+        request_body=request_data,
+        route=route,
+        team_object=team_object,
+        project_object=project_object,
+    )
+    if projection is None:
+        return
+    user_api_key_auth_obj.code_plan_reservation = await CodePlanQuotaManager.reserve_for_request(
+        request_body=request_data,
+        projection=projection,
+        user_api_key_cache=user_api_key_cache,
     )
 
 

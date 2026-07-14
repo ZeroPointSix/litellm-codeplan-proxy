@@ -1138,7 +1138,17 @@ class ProxyBaseLLMRequestProcessing:
         ):
             self.data["model"] = user_api_key_dict.aliases[self.data["model"]]
 
-        self.data["litellm_call_id"] = request.headers.get("x-litellm-call-id", str(uuid.uuid4()))
+        if getattr(user_api_key_dict, "code_plan_reservation", None) is not None:
+            from litellm.proxy.code_plan import CodePlanUpstreamService
+
+            self.data = CodePlanUpstreamService.apply_upstream_request(
+                data=self.data,
+                valid_token=user_api_key_dict,
+            )
+
+        self.data["litellm_call_id"] = request.headers.get(
+            "x-litellm-call-id", self.data.get("litellm_call_id") or str(uuid.uuid4())
+        )
         DDSpanTagger.tag_call_id(self.data.get("litellm_call_id"))
         DDSpanTagger.tag_request(
             user_api_key_dict=user_api_key_dict,
@@ -2683,11 +2693,13 @@ class ProxyBaseLLMRequestProcessing:
                 proxy_logging_obj._release_max_parallel_requests_on_disconnect(user_api_key_dict)
                 client_disconnected = True
             if not delivered_chunk:
+                from litellm.proxy.code_plan import release_code_plan_reservation_on_cancel
                 from litellm.proxy.spend_tracking.budget_reservation import (
                     release_budget_reservation_on_cancel,
                 )
 
                 await release_budget_reservation_on_cancel(getattr(user_api_key_dict, "budget_reservation", None))
+                await release_code_plan_reservation_on_cancel(getattr(user_api_key_dict, "code_plan_reservation", None))
             raise
         except Exception as e:
             verbose_proxy_logger.exception(

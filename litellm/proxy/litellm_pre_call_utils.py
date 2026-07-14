@@ -992,6 +992,10 @@ class LiteLLMProxyRequestSetup:
         )
         if user_api_key_dict.budget_reservation is not None:
             data[_metadata_variable_name]["user_api_key_budget_reservation"] = user_api_key_dict.budget_reservation
+        if user_api_key_dict.code_plan_reservation is not None:
+            data[_metadata_variable_name]["user_api_key_code_plan_reservation"] = (
+                user_api_key_dict.code_plan_reservation
+            )
         # Add the full UserAPIKeyAuth object for MCP server access control
         data[_metadata_variable_name]["user_api_key_auth"] = user_api_key_dict
         return data

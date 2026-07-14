@@ -67,6 +67,13 @@ class _ProxyDBLogger(CustomLogger):
                     "Failed to invalidate budget reservation counters after failure release failed"
                 )
 
+        try:
+            await _release_code_plan_reservation(
+                code_plan_reservation=getattr(user_api_key_dict, "code_plan_reservation", None)
+            )
+        except (RuntimeError, TypeError, ValueError):
+            verbose_proxy_logger.exception("Failed to release Code Plan reservation during failure handling")
+
         request_route = user_api_key_dict.request_route
         if _ProxyDBLogger._should_track_errors_in_db() is False:
             return
@@ -205,6 +212,7 @@ class _ProxyDBLogger(CustomLogger):
                 metadata = await _ProxyDBLogger._enrich_failure_metadata_with_key_info(metadata=metadata)
                 _write_spend_metadata_to_kwargs(kwargs=kwargs, metadata=metadata)
             budget_reservation = _get_budget_reservation_from_metadata(metadata=metadata)
+            code_plan_reservation = _get_code_plan_reservation_from_metadata(metadata=metadata)
             user_id = cast(Optional[str], metadata.get("user_api_key_user_id", None))
             team_id = cast(Optional[str], metadata.get("user_api_key_team_id", None))
             org_id = cast(Optional[str], metadata.get("user_api_key_org_id", None))
@@ -251,6 +259,7 @@ class _ProxyDBLogger(CustomLogger):
                         end_time=end_time,
                         response_cost=response_cost,
                         budget_reservation=budget_reservation,
+                        code_plan_reservation=code_plan_reservation,
                         request_tags=tags,
                     )
 
@@ -275,10 +284,12 @@ class _ProxyDBLogger(CustomLogger):
                         response_cost=response_cost,
                         max_budget=end_user_max_budget,
                     )
-                elif budget_reservation is not None:
+                else:
                     await _release_budget_reservation(budget_reservation=budget_reservation)
+                    await _release_code_plan_reservation(code_plan_reservation=code_plan_reservation)
             else:
                 await _release_budget_reservation(budget_reservation=budget_reservation)
+                await _release_code_plan_reservation(code_plan_reservation=code_plan_reservation)
                 # Non-model call types (health checks, afile_delete) have no model or standard_logging_object.
                 # Use .get() for "stream" to avoid KeyError on health checks.
                 # WS session wrappers (_aresponses_websocket, _arealtime) also reach here with
@@ -457,6 +468,12 @@ def _get_budget_reservation_from_metadata(metadata: dict) -> Optional[dict]:
     return getattr(user_api_key_auth_obj, "budget_reservation", None)
 
 
+def _get_code_plan_reservation_from_metadata(metadata: dict) -> dict | None:
+    from litellm.proxy.code_plan import code_plan_reservation_from_metadata
+
+    return code_plan_reservation_from_metadata(metadata=metadata)
+
+
 def _get_request_tags_for_cost_tracking(
     sl_object: Optional[StandardLoggingPayload],
     metadata: dict,
@@ -487,6 +504,7 @@ async def _update_database_and_spend_counters(
     end_time: Any,
     response_cost: float,
     budget_reservation: Optional[dict],
+    code_plan_reservation: dict | None,
     request_tags: Optional[List[str]] = None,
 ) -> None:
     try:
@@ -514,6 +532,10 @@ async def _update_database_and_spend_counters(
                     verbose_proxy_logger.exception(
                         "Failed to invalidate budget reservation counters after release failed"
                     )
+        try:
+            await _release_code_plan_reservation(code_plan_reservation=code_plan_reservation)
+        except (RuntimeError, TypeError, ValueError):
+            verbose_proxy_logger.exception("Failed to release Code Plan reservation after database update failed")
         raise
 
     try:
@@ -527,6 +549,11 @@ async def _update_database_and_spend_counters(
             end_user_id=end_user_id,
             tags=request_tags,
         )
+        await _settle_code_plan_reservation(
+            code_plan_reservation=code_plan_reservation,
+            standard_logging_object=kwargs.get("standard_logging_object", None),
+            completion_response=completion_response,
+        )
     except Exception:
         if budget_reservation is not None:
             try:
@@ -537,6 +564,14 @@ async def _update_database_and_spend_counters(
                 )
             finally:
                 budget_reservation["finalized"] = True
+        try:
+            await _settle_code_plan_reservation(
+                code_plan_reservation=code_plan_reservation,
+                standard_logging_object=kwargs.get("standard_logging_object", None),
+                completion_response=completion_response,
+            )
+        except (RuntimeError, TypeError, ValueError):
+            verbose_proxy_logger.exception("Failed to settle Code Plan reservation after spend counter update failed")
         raise
 
 
@@ -550,6 +585,32 @@ async def _release_budget_reservation(budget_reservation: Optional[dict]) -> Non
 
     await release_budget_reservation(
         budget_reservation=budget_reservation,
+    )
+
+
+async def _release_code_plan_reservation(code_plan_reservation: dict | None) -> None:
+    if code_plan_reservation is None:
+        return
+
+    from litellm.proxy.code_plan import release_code_plan_reservation
+
+    await release_code_plan_reservation(code_plan_reservation=code_plan_reservation)
+
+
+async def _settle_code_plan_reservation(
+    code_plan_reservation: dict | None,
+    standard_logging_object: dict | None,
+    completion_response: Any | None,
+) -> None:
+    if code_plan_reservation is None:
+        return
+
+    from litellm.proxy.code_plan import UsageRecorder
+
+    await UsageRecorder.settle_from_callback(
+        reservation=code_plan_reservation,
+        standard_logging_object=standard_logging_object,
+        completion_response=completion_response,
     )
 
 
