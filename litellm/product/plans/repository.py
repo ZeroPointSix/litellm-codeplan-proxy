@@ -41,6 +41,15 @@ class PlanRepository:
         record = await self.table.update(where={"plan_id": plan_id}, data=self._serialize(data))
         return self._to_model(record)
 
+    async def update_if_version(self, plan_id: str, version: int, data: dict[str, Any]) -> Optional[PlanRecord]:
+        updated = await self.table.update_many(
+            where={"plan_id": plan_id, "version": version},
+            data=self._serialize(data),
+        )
+        if self._updated_count(updated) == 0:
+            return None
+        return await self.get(plan_id)
+
     def _to_model(self, record: Any) -> PlanRecord:
         if isinstance(record, BaseModel):
             data = record.model_dump(exclude_none=False)
@@ -63,3 +72,14 @@ class PlanRepository:
         if isinstance(metadata, dict):
             serialized["metadata"] = json.dumps(metadata)
         return serialized
+
+    def _updated_count(self, result: Any) -> int:
+        if isinstance(result, int):
+            return result
+        if isinstance(result, dict) and "count" in result:
+            return int(result["count"])
+
+        count = getattr(result, "count", None)
+        if count is not None:
+            return int(count)
+        return int(result)
