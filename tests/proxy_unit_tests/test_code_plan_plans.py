@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from litellm.product.plans.litellm_mapping import plan_to_litellm_team_config
 from litellm.product.plans.models import PlanCreateRequest, PlanPatchRequest, PlanRecord, PlanStatus
+from litellm.product.plans.repository import PlanRepository
 from litellm.product.plans.router import CODE_PLAN_MANAGEMENT_ROUTES
 from litellm.product.plans.service import PlanService
 from litellm.proxy._types import LiteLLMRoutes
@@ -55,6 +56,32 @@ class RacingPlanRepository(InMemoryPlanRepository):
         existing = self.records[plan_id]
         self.records[plan_id] = existing.model_copy(update={"version": existing.version + 1})
         return None
+
+
+class ReplicaReadActions:
+    async def find_unique(self, *args, **kwargs):
+        raise AssertionError("update_if_version must not read the replica after a successful write")
+
+
+class RecordingWriter:
+    def __init__(self, row):
+        self.row = row
+        self.calls = []
+
+    async def query_raw(self, query, *args):
+        self.calls.append((query, args))
+        return [self.row]
+
+
+class RawUpdateDB:
+    def __init__(self, row):
+        self.writer = RecordingWriter(row)
+        self.litellm_codeplantable = ReplicaReadActions()
+
+
+class RawUpdatePrismaClient:
+    def __init__(self, row):
+        self.db = RawUpdateDB(row)
 
 
 def _create_request(**overrides):
@@ -114,6 +141,53 @@ def test_code_plan_routes_are_management_routes():
     assert RouteChecks.check_route_access(route="/v1/admin/plans/plan-1", allowed_routes=management_routes)
     assert RouteChecks.check_route_access(route="/v1/admin/plans/plan-1/activate", allowed_routes=management_routes)
     assert RouteChecks.check_route_access(route="/v1/admin/plans/plan-1/archive", allowed_routes=management_routes)
+
+
+@pytest.mark.asyncio
+async def test_update_if_version_returns_writer_row_without_replica_read():
+    now = datetime.now(timezone.utc)
+    row = {
+        "plan_id": "plan-1",
+        "name": "Pro Code",
+        "description": None,
+        "status": PlanStatus.DRAFT.value,
+        "version": 2,
+        "quota_5h": 200,
+        "quota_weekly": 1000,
+        "allowed_models": ["anthropic/claude-4-sonnet"],
+        "rpm_limit": None,
+        "tpm_limit": None,
+        "max_parallel_requests": None,
+        "max_keys": 5,
+        "default_max_output_tokens": None,
+        "credit_rule_id": None,
+        "metadata": {"tier": "pro"},
+        "created_at": now,
+        "created_by": None,
+        "updated_at": now,
+        "updated_by": "admin-user",
+    }
+    repository = PlanRepository(RawUpdatePrismaClient(row))
+
+    updated = await repository.update_if_version(
+        "plan-1",
+        1,
+        {"quota_5h": 200, "version": 2, "metadata": {"tier": "pro"}},
+    )
+
+    assert updated is not None
+    assert updated.version == 2
+    assert updated.quota_5h == 200
+    assert updated.metadata == {"tier": "pro"}
+
+    query, args = repository.prisma_client.db.writer.calls[0]
+    assert query.startswith('UPDATE "LiteLLM_CodePlanTable" SET ')
+    assert '"quota_5h" = $1' in query
+    assert '"version" = $2' in query
+    assert '"metadata" = $3::jsonb' in query
+    assert '"updated_at" = CURRENT_TIMESTAMP' in query
+    assert 'WHERE "plan_id" = $4 AND "version" = $5' in query
+    assert args == (200, 2, '{"tier": "pro"}', "plan-1", 1)
 
 
 @pytest.mark.asyncio
