@@ -60,8 +60,7 @@ class PlanService:
         merged.update(patch)
         self._validate_entitlements(merged)
 
-        patch.update({"version": existing.version + 1, "updated_by": self._actor_id(actor)})
-        return await self.repository.update(plan_id, patch)
+        return await self._update_existing(existing, patch, actor=actor)
 
     async def activate_plan(
         self, plan_id: str, version: Optional[int] = None, actor: Optional[UserAPIKeyAuth] = None
@@ -79,14 +78,7 @@ class PlanService:
                 detail={"error": "allowed_models must be non-empty before activation"},
             )
 
-        return await self.repository.update(
-            plan_id,
-            {
-                "status": PlanStatus.ACTIVE.value,
-                "version": existing.version + 1,
-                "updated_by": self._actor_id(actor),
-            },
-        )
+        return await self._update_existing(existing, {"status": PlanStatus.ACTIVE.value}, actor=actor)
 
     async def archive_plan(
         self, plan_id: str, version: Optional[int] = None, actor: Optional[UserAPIKeyAuth] = None
@@ -101,21 +93,32 @@ class PlanService:
                 status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Only active plans can be archived"}
             )
 
-        return await self.repository.update(
-            plan_id,
-            {
-                "status": PlanStatus.ARCHIVED.value,
-                "version": existing.version + 1,
-                "updated_by": self._actor_id(actor),
-            },
-        )
+        return await self._update_existing(existing, {"status": PlanStatus.ARCHIVED.value}, actor=actor)
+
+    async def _update_existing(
+        self,
+        existing: PlanRecord,
+        data: dict[str, Any],
+        actor: Optional[UserAPIKeyAuth] = None,
+    ) -> PlanRecord:
+        patch = dict(data)
+        patch.update({"version": existing.version + 1, "updated_by": self._actor_id(actor)})
+        updated = await self.repository.update_if_version(existing.plan_id, existing.version, patch)
+        if updated is None:
+            latest = await self.repository.get(existing.plan_id)
+            current_version = latest.version if latest is not None else existing.version
+            self._raise_version_conflict(current_version)
+        return updated
 
     def _require_version(self, plan: PlanRecord, version: int) -> None:
         if plan.version != version:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"error": "Plan version conflict", "current_version": plan.version},
-            )
+            self._raise_version_conflict(plan.version)
+
+    def _raise_version_conflict(self, current_version: int) -> None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "Plan version conflict", "current_version": current_version},
+        )
 
     def _validate_entitlements(self, data: dict[str, Any]) -> None:
         entitlement_data = {
