@@ -9,8 +9,25 @@ from litellm.product.plans.models import (
 )
 from litellm.product.plans.repository import PlanRepository
 from litellm.product.plans.service import PlanService
-from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
+from litellm.proxy._types import LiteLLMRoutes, LitellmUserRoles, UserAPIKeyAuth
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+
+CODE_PLAN_MANAGEMENT_ROUTES = [
+    "/v1/admin/plans",
+    "/v1/admin/plans/{plan_id}",
+    "/v1/admin/plans/{plan_id}/activate",
+    "/v1/admin/plans/{plan_id}/archive",
+]
+
+
+def _register_management_routes() -> None:
+    management_routes = LiteLLMRoutes.management_routes.value
+    for route in CODE_PLAN_MANAGEMENT_ROUTES:
+        if route not in management_routes:
+            management_routes.append(route)
+
+
+_register_management_routes()
 
 router = APIRouter(prefix="/v1/admin/plans", tags=["Code Plan"])
 
