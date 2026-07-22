@@ -357,6 +357,7 @@ from litellm.proxy.logging_endpoints.callback_logs_endpoints import (
 from litellm.proxy.management_endpoints.budget_management_endpoints import (
     router as budget_management_router,
 )
+from litellm.product.plans.router import router as code_plan_router
 from litellm.proxy.management_endpoints.cache_settings_endpoints import (
     router as cache_settings_router,
 )
@@ -15987,6 +15988,7 @@ app.include_router(ui_crud_endpoints_router)
 app.include_router(team_callback_router)
 app.include_router(budget_management_router)
 app.include_router(model_management_router)
+app.include_router(code_plan_router)
 app.include_router(model_access_group_management_router)
 app.include_router(tag_management_router)
 app.include_router(workflow_management_router)

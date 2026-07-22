@@ -157,6 +157,31 @@ model LiteLLM_TeamTable {
 }
 
 // Projects sit between teams and keys for use-case management
+model LiteLLM_CodePlanTable {
+  plan_id                   String   @id @default(uuid())
+  name                      String   @unique
+  description               String?
+  status                    String   @default("draft")
+  quota_5h                  Int
+  quota_weekly              Int
+  allowed_models            String[] @default([])
+  rpm_limit                 BigInt?
+  tpm_limit                 BigInt?
+  max_parallel_requests     Int?
+  max_keys                  Int      @default(5)
+  default_max_output_tokens Int?
+  credit_rule_id            String?
+  metadata                  Json     @default("{}")
+  version                   Int      @default(1)
+  created_at                DateTime @default(now()) @map("created_at")
+  created_by                String?
+  updated_at                DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by                String?
+
+  @@index([status])
+  @@index([created_at])
+}
+
 model LiteLLM_ProjectTable {
   project_id           String   @id @default(uuid())
   project_alias        String?
