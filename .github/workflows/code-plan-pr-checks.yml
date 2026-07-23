@@ -4,10 +4,13 @@ on:
   push:
     branches:
       - codex/zer-150-plan-module
+      - litellm_zer_151_credit_rules
     paths:
       - ".github/workflows/code-plan-pr-checks.yml"
       - "litellm/product/plans/**"
+      - "litellm/product/credit_rules/**"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
       - "schema.prisma"
       - "litellm/proxy/schema.prisma"
       - "litellm-proxy-extras/litellm_proxy_extras/schema.prisma"
@@ -17,7 +20,9 @@ on:
     paths:
       - ".github/workflows/code-plan-pr-checks.yml"
       - "litellm/product/plans/**"
+      - "litellm/product/credit_rules/**"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
       - "schema.prisma"
       - "litellm/proxy/schema.prisma"
       - "litellm-proxy-extras/litellm_proxy_extras/schema.prisma"
@@ -52,11 +57,11 @@ jobs:
       - name: Install dependencies
         run: make install-test-deps
 
-      - name: Run Plan pytest
-        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_plans.py -q
+      - name: Run Code Plan pytest
+        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py -q
 
-      - name: Run Plan ruff
-        run: .venv/bin/ruff check litellm/product/plans tests/proxy_unit_tests/test_code_plan_plans.py
+      - name: Run Code Plan ruff
+        run: .venv/bin/ruff check litellm/product/plans litellm/product/credit_rules tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py
 
       - name: Validate proxy Prisma schema
         run: .venv/bin/prisma validate --schema litellm/proxy/schema.prisma

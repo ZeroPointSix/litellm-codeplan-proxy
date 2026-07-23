@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from litellm.product.credit_rules.repository import CreditRuleRepository
 from litellm.product.plans.models import (
     PlanCreateRequest,
     PlanListResponse,
@@ -46,7 +47,7 @@ def _get_service() -> PlanService:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "Postgres DB Not connected"}
         )
-    return PlanService(PlanRepository(prisma_client))
+    return PlanService(PlanRepository(prisma_client), credit_rule_repository=CreditRuleRepository(prisma_client))
 
 
 @router.post("", response_model=PlanRecord)

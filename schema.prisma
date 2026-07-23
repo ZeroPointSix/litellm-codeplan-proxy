@@ -182,6 +182,31 @@ model LiteLLM_CodePlanTable {
   @@index([created_at])
 }
 
+model LiteLLM_CreditRuleTable {
+  id                     String   @id @default(uuid())
+  credit_rule_id         String   @default(uuid())
+  name                   String
+  description            String?
+  status                 String   @default("draft")
+  input_multiplier       Float
+  output_multiplier      Float
+  cache_read_multiplier  Float
+  cache_write_multiplier Float
+  effective_at           DateTime?
+  metadata               Json     @default("{}")
+  version                Int      @default(1)
+  created_at             DateTime @default(now()) @map("created_at")
+  created_by             String?
+  updated_at             DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by             String?
+
+  @@unique([credit_rule_id, version])
+  @@index([credit_rule_id])
+  @@index([status])
+  @@index([effective_at])
+  @@index([created_at])
+}
+
 model LiteLLM_ProjectTable {
   project_id           String   @id @default(uuid())
   project_alias        String?

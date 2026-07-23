@@ -1,8 +1,10 @@
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
+from litellm.product.credit_rules.repository import CreditRuleRepository
+from litellm.product.credit_rules.service import CreditRuleService
 from litellm.product.plans.models import (
     PlanCreateRequest,
     PlanEntitlements,
@@ -15,11 +17,13 @@ from litellm.proxy._types import UserAPIKeyAuth
 
 
 class PlanService:
-    def __init__(self, repository: PlanRepository):
+    def __init__(self, repository: PlanRepository, credit_rule_repository: CreditRuleRepository | None = None):
         self.repository = repository
+        self.credit_rule_repository = credit_rule_repository
 
-    async def create_plan(self, data: PlanCreateRequest, actor: Optional[UserAPIKeyAuth] = None) -> PlanRecord:
+    async def create_plan(self, data: PlanCreateRequest, actor: UserAPIKeyAuth | None = None) -> PlanRecord:
         payload = data.model_dump()
+        await self._validate_credit_rule_binding(payload.get("credit_rule_id"))
         payload.update(
             {
                 "status": PlanStatus.DRAFT.value,
@@ -30,7 +34,7 @@ class PlanService:
         )
         return await self.repository.create(payload)
 
-    async def list_plans(self, status_filter: Optional[PlanStatus] = None) -> list[PlanRecord]:
+    async def list_plans(self, status_filter: PlanStatus | None = None) -> list[PlanRecord]:
         status_value = status_filter.value if status_filter else None
         return await self.repository.list(status=status_value)
 
@@ -44,7 +48,7 @@ class PlanService:
         self,
         plan_id: str,
         data: PlanPatchRequest,
-        actor: Optional[UserAPIKeyAuth] = None,
+        actor: UserAPIKeyAuth | None = None,
     ) -> PlanRecord:
         existing = await self.get_plan(plan_id)
         self._require_version(existing, data.version)
@@ -59,11 +63,12 @@ class PlanService:
             patch["metadata"] = {}
         merged.update(patch)
         self._validate_entitlements(merged)
+        await self._validate_credit_rule_binding(merged.get("credit_rule_id"))
 
         return await self._update_existing(existing, patch, actor=actor)
 
     async def activate_plan(
-        self, plan_id: str, version: Optional[int] = None, actor: Optional[UserAPIKeyAuth] = None
+        self, plan_id: str, version: int | None = None, actor: UserAPIKeyAuth | None = None
     ) -> PlanRecord:
         existing = await self.get_plan(plan_id)
         if version is not None:
@@ -77,11 +82,12 @@ class PlanService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "allowed_models must be non-empty before activation"},
             )
+        await self._validate_credit_rule_binding(existing.credit_rule_id)
 
         return await self._update_existing(existing, {"status": PlanStatus.ACTIVE.value}, actor=actor)
 
     async def archive_plan(
-        self, plan_id: str, version: Optional[int] = None, actor: Optional[UserAPIKeyAuth] = None
+        self, plan_id: str, version: int | None = None, actor: UserAPIKeyAuth | None = None
     ) -> PlanRecord:
         existing = await self.get_plan(plan_id)
         if version is not None:
@@ -99,7 +105,7 @@ class PlanService:
         self,
         existing: PlanRecord,
         data: dict[str, Any],
-        actor: Optional[UserAPIKeyAuth] = None,
+        actor: UserAPIKeyAuth | None = None,
     ) -> PlanRecord:
         patch = dict(data)
         patch.update({"version": existing.version + 1, "updated_by": self._actor_id(actor)})
@@ -129,7 +135,12 @@ class PlanService:
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
-    def _actor_id(self, actor: Optional[UserAPIKeyAuth]) -> Optional[str]:
+    async def _validate_credit_rule_binding(self, credit_rule_id: str | None) -> None:
+        if credit_rule_id is None or self.credit_rule_repository is None:
+            return
+        await CreditRuleService(self.credit_rule_repository).require_active_rule(credit_rule_id)
+
+    def _actor_id(self, actor: UserAPIKeyAuth | None) -> str | None:
         if actor is None:
             return None
         for field_name in ("user_id", "key_alias", "token"):
