@@ -182,6 +182,33 @@ model LiteLLM_CodePlanTable {
   @@index([created_at])
 }
 
+model LiteLLM_CodePlanSubscriptionTable {
+  subscription_id String   @id @default(uuid())
+  project_id      String
+  plan_id         String
+  status          String   @default("active")
+  plan_snapshot   Json
+  litellm_team_id String?
+  litellm_key_ids String[] @default([])
+  expires_at      DateTime?
+  renewed_at      DateTime?
+  paused_at       DateTime?
+  canceled_at     DateTime?
+  metadata        Json     @default("{}")
+  version         Int      @default(1)
+  created_at      DateTime @default(now()) @map("created_at")
+  created_by      String?
+  updated_at      DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by      String?
+
+  @@index([project_id])
+  @@index([plan_id])
+  @@index([status])
+  @@index([litellm_team_id])
+  @@index([expires_at])
+  @@index([created_at])
+}
+
 model LiteLLM_CreditRuleTable {
   id                     String   @id @default(uuid())
   credit_rule_id         String   @default(uuid())
