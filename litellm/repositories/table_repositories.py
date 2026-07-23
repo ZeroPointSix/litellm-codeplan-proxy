@@ -117,6 +117,10 @@ class CodePlanRepository(PrismaTableRepository):
     table_name = "litellm_codeplantable"
 
 
+class CodePlanSubscriptionRepository(PrismaTableRepository):
+    table_name = "litellm_codeplansubscriptiontable"
+
+
 class CreditRuleTableRepository(PrismaTableRepository):
     table_name = "litellm_creditruletable"
 
