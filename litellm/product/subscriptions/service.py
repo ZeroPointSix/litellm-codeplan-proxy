@@ -94,7 +94,9 @@ class SubscriptionService:
         existing = await self.get_subscription(subscription_id)
         self._require_version(existing, data.version)
         if existing.status == SubscriptionStatus.CANCELED:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Canceled subscriptions cannot renew"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Canceled subscriptions cannot renew"}
+            )
 
         expires_at = data.expires_at if "expires_at" in data.model_fields_set else existing.expires_at
         self._validate_future_expiry(expires_at)
@@ -125,7 +127,9 @@ class SubscriptionService:
         existing = await self.get_subscription(subscription_id)
         self._require_version(existing, data.version)
         if existing.status != SubscriptionStatus.ACTIVE:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Only active subscriptions can pause"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Only active subscriptions can pause"}
+            )
         await self._revoke_keys(existing.litellm_key_ids, actor=actor)
         return await self._update_existing(
             existing,
@@ -270,10 +274,14 @@ class SubscriptionService:
         self._require_active_subscription(record)
         self._require_not_expired(record)
         if len(record.litellm_key_ids) >= record.plan_snapshot.max_keys:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription max_keys exceeded"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription max_keys exceeded"}
+            )
         record = await self._sync_litellm_team(record, actor=actor)
         if self.litellm_client is None or not record.litellm_team_id:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"}
+            )
 
         provision = await self.litellm_client.generate_key(
             team_id=record.litellm_team_id,
@@ -300,7 +308,9 @@ class SubscriptionService:
         if self.litellm_client is None:
             if record.litellm_team_id:
                 return record
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"}
+            )
         config = self._team_config(record)
         if record.litellm_team_id:
             await self.litellm_client.update_team(record.litellm_team_id, config, actor=actor)
@@ -330,7 +340,9 @@ class SubscriptionService:
         if not key_ids:
             return
         if self.litellm_client is None:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"})
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"error": "LiteLLM client unavailable"}
+            )
         for key_id in key_ids:
             await self.litellm_client.revoke_key(key_id, actor=actor)
 
@@ -339,7 +351,9 @@ class SubscriptionService:
         if plan is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"error": "Plan not found"})
         if plan.status != PlanStatus.ACTIVE:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription requires an active Plan"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription requires an active Plan"}
+            )
         return plan
 
     async def _active_credit_rule(self, plan: PlanRecord) -> Any | None:
@@ -381,13 +395,19 @@ class SubscriptionService:
 
     def _validate_future_expiry(self, expires_at: datetime | None) -> None:
         if expires_at is not None and self._utc(expires_at) <= self._now():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "expires_at must be in the future"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "expires_at must be in the future"}
+            )
 
     def _require_upgrade(self, current: PlanSnapshot, new_plan: PlanRecord) -> None:
         if self._is_downgrade(current, new_plan):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Plan downgrade is not allowed"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Plan downgrade is not allowed"}
+            )
         if current.plan_id == new_plan.plan_id and current.plan_version == new_plan.version:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription is already on this Plan"})
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail={"error": "Subscription is already on this Plan"}
+            )
 
     def _is_downgrade(self, current: PlanSnapshot, new_plan: PlanRecord) -> bool:
         if new_plan.quota_5h < current.quota_5h or new_plan.quota_weekly < current.quota_weekly:

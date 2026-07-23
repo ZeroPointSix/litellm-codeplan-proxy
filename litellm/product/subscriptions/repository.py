@@ -116,7 +116,9 @@ class SubscriptionRepository:
     def _validate_update_columns(self, columns: list[str]) -> None:
         invalid_columns = [column for column in columns if column not in self.raw_update_columns]
         if invalid_columns:
-            raise ValueError(f"Unsupported Code Plan Subscription update column(s): {', '.join(sorted(invalid_columns))}")
+            raise ValueError(
+                f"Unsupported Code Plan Subscription update column(s): {', '.join(sorted(invalid_columns))}"
+            )
 
     def _first_row(self, rows: Any) -> Optional[Any]:
         if rows is None:
