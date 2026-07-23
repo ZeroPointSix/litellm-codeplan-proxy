@@ -221,6 +221,47 @@ async def test_create_subscription_freezes_snapshot_and_provisions_team_key():
 
 
 @pytest.mark.asyncio
+async def test_create_subscription_without_key_keeps_skeleton_only():
+    service, _, _, litellm_client = _service()
+
+    response = await service.create_subscription(
+        SubscriptionCreateRequest(
+            project_id="project-1",
+            plan_id="plan-basic",
+            issue_key=False,
+            metadata={"phase": "s1"},
+        )
+    )
+
+    subscription = response.subscription
+    assert response.key is None
+    assert response.key_id is None
+    assert subscription.version == 1
+    assert subscription.litellm_team_id is None
+    assert subscription.litellm_key_ids == []
+    assert subscription.metadata == {"phase": "s1"}
+    assert litellm_client.created_teams == {}
+    assert litellm_client.generated_keys == []
+
+
+@pytest.mark.asyncio
+async def test_subscription_version_conflict_returns_409():
+    service, _, _, _ = _service()
+    created = await service.create_subscription(
+        SubscriptionCreateRequest(project_id="project-1", plan_id="plan-basic", issue_key=False)
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await service.pause_subscription(
+            created.subscription.subscription_id,
+            SubscriptionActionRequest(version=created.subscription.version + 1),
+        )
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == {"error": "Subscription version conflict", "current_version": created.subscription.version}
+
+
+@pytest.mark.asyncio
 async def test_update_if_version_returns_writer_row_with_json_and_array_casts():
     now = datetime.now(timezone.utc)
     snapshot = plan_snapshot_from_plan(_plan()).model_dump(mode="json")
