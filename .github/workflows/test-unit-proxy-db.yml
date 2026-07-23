@@ -94,8 +94,11 @@ jobs:
             timeout: 20
 
           # ---- Code Plan product module ----
-          - test-group: code-plan-plans
-            test-path: "tests/proxy_unit_tests/test_code_plan_plans.py"
+          - test-group: code-plan
+            test-path: >-
+              tests/proxy_unit_tests/test_code_plan_plans.py
+              tests/proxy_unit_tests/test_code_plan_credit_rules.py
+              tests/proxy_unit_tests/test_code_plan_credit_rules_api.py
             workers: 0
             dist: loadscope
             timeout: 10

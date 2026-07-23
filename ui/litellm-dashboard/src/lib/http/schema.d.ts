@@ -15032,6 +15032,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/credit-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Credit Rules */
+        get: operations["list_credit_rules_v1_admin_credit_rules_get"];
+        put?: never;
+        /** Create Credit Rule */
+        post: operations["create_credit_rule_v1_admin_credit_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Credit Rule */
+        get: operations["get_credit_rule_v1_admin_credit_rules__credit_rule_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Credit Rule */
+        patch: operations["patch_credit_rule_v1_admin_credit_rules__credit_rule_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Credit Rule */
+        post: operations["activate_credit_rule_v1_admin_credit_rules__credit_rule_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Credit Rule */
+        post: operations["archive_credit_rule_v1_admin_credit_rules__credit_rule_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plans */
+        get: operations["list_plans_v1_admin_plans_get"];
+        put?: never;
+        /** Create Plan */
+        post: operations["create_plan_v1_admin_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plan */
+        get: operations["get_plan_v1_admin_plans__plan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Plan */
+        patch: operations["patch_plan_v1_admin_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Plan */
+        post: operations["activate_plan_v1_admin_plans__plan_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Plan */
+        post: operations["archive_plan_v1_admin_plans__plan_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -23146,6 +23286,102 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** CreditRuleCreateRequest */
+        CreditRuleCreateRequest: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier: number;
+            /** Cache Write Multiplier */
+            cache_write_multiplier: number;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Input Multiplier */
+            input_multiplier: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Output Multiplier */
+            output_multiplier: number;
+        };
+        /** CreditRuleListResponse */
+        CreditRuleListResponse: {
+            /** Data */
+            data: components["schemas"]["CreditRuleRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** CreditRulePatchRequest */
+        CreditRulePatchRequest: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier?: number | null;
+            /** Cache Write Multiplier */
+            cache_write_multiplier?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Input Multiplier */
+            input_multiplier?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Output Multiplier */
+            output_multiplier?: number | null;
+            /** Version */
+            version: number;
+        };
+        /** CreditRuleRecord */
+        CreditRuleRecord: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier: number;
+            /** Cache Write Multiplier */
+            cache_write_multiplier: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Credit Rule Id */
+            credit_rule_id: string;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Id */
+            id: string;
+            /** Input Multiplier */
+            input_multiplier: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Output Multiplier */
+            output_multiplier: number;
+            /** @default draft */
+            status: components["schemas"]["CreditRuleStatus"];
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+        };
+        /**
+         * CreditRuleStatus
+         * @enum {string}
+         */
+        CreditRuleStatus: "draft" | "active" | "archived";
         /**
          * CustomerResponse
          * @description Customer object returned by the /customer read+write endpoints.
@@ -28852,6 +29088,130 @@ export interface components {
                 [key: string]: string;
             }[];
         };
+        /** PlanCreateRequest */
+        PlanCreateRequest: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+        };
+        /** PlanListResponse */
+        PlanListResponse: {
+            /** Data */
+            data: components["schemas"]["PlanRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** PlanPatchRequest */
+        PlanPatchRequest: {
+            /** Allowed Models */
+            allowed_models?: string[] | null;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Max Keys */
+            max_keys?: number | null;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Quota 5H */
+            quota_5h?: number | null;
+            /** Quota Weekly */
+            quota_weekly?: number | null;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+            /** Version */
+            version: number;
+        };
+        /** PlanRecord */
+        PlanRecord: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** @default draft */
+            status: components["schemas"]["PlanStatus"];
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+        };
+        /**
+         * PlanStatus
+         * @enum {string}
+         */
+        PlanStatus: "draft" | "active" | "archived";
         /**
          * PluginAuthor
          * @description Plugin author information.
@@ -52059,6 +52419,401 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_credit_rules_v1_admin_credit_rules_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CreditRuleStatus"] | null;
+                credit_rule_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_credit_rule_v1_admin_credit_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_credit_rule_v1_admin_credit_rules__credit_rule_id__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_credit_rule_v1_admin_credit_rules__credit_rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditRulePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_credit_rule_v1_admin_credit_rules__credit_rule_id__activate_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_credit_rule_v1_admin_credit_rules__credit_rule_id__archive_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_plans_v1_admin_plans_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PlanStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_plan_v1_admin_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plan_v1_admin_plans__plan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plan_v1_admin_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_plan_v1_admin_plans__plan_id__activate_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_plan_v1_admin_plans__plan_id__archive_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
             };
             /** @description Validation Error */
             422: {

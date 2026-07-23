@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - codex/zer-150-plan-module
+      - litellm_zer_151_credit_rules
     paths:
       - ".github/workflows/code-plan-pr-checks.yml"
+      - "backend/routes/allowlist.py"
       - "litellm/product/plans/**"
+      - "litellm/product/credit_rules/**"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules_api.py"
+      - "tests/proxy_unit_tests/code_plan_api_test_utils.py"
       - "schema.prisma"
       - "litellm/proxy/schema.prisma"
       - "litellm-proxy-extras/litellm_proxy_extras/schema.prisma"
@@ -16,8 +22,13 @@ on:
       - litellm_internal_staging
     paths:
       - ".github/workflows/code-plan-pr-checks.yml"
+      - "backend/routes/allowlist.py"
       - "litellm/product/plans/**"
+      - "litellm/product/credit_rules/**"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
+      - "tests/proxy_unit_tests/test_code_plan_credit_rules_api.py"
+      - "tests/proxy_unit_tests/code_plan_api_test_utils.py"
       - "schema.prisma"
       - "litellm/proxy/schema.prisma"
       - "litellm-proxy-extras/litellm_proxy_extras/schema.prisma"
@@ -33,6 +44,21 @@ jobs:
     timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/litellm
+      CODE_PLAN_API_INTEGRATION: "true"
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: litellm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
@@ -52,11 +78,17 @@ jobs:
       - name: Install dependencies
         run: make install-test-deps
 
-      - name: Run Plan pytest
-        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_plans.py -q
+      - name: Push Prisma schema to Postgres
+        run: .venv/bin/prisma db push --schema litellm/proxy/schema.prisma --accept-data-loss --skip-generate
 
-      - name: Run Plan ruff
-        run: .venv/bin/ruff check litellm/product/plans tests/proxy_unit_tests/test_code_plan_plans.py
+      - name: Run Code Plan unit pytest
+        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py -q
+
+      - name: Run Code Plan API integration pytest
+        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_credit_rules_api.py -q
+
+      - name: Run Code Plan ruff
+        run: .venv/bin/ruff check litellm/product/plans litellm/product/credit_rules tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py tests/proxy_unit_tests/test_code_plan_credit_rules_api.py tests/proxy_unit_tests/code_plan_api_test_utils.py
 
       - name: Validate proxy Prisma schema
         run: .venv/bin/prisma validate --schema litellm/proxy/schema.prisma

@@ -52,6 +52,9 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     "/credentials",
     "/credential",
     "/provider/budgets",
+    # Code Plan admin
+    "/v1/admin/plans/",
+    "/v1/admin/credit-rules/",
     # Tools / agents (registry & policy admin)
     "/v1/tool/",
     "/v1/agents",
@@ -137,6 +140,8 @@ BACKEND_EXACT_PATHS: frozenset[str] = frozenset(
         "/docs/oauth2-redirect",
         "/redoc",
         "/fallback/login",
+        "/v1/admin/plans",
+        "/v1/admin/credit-rules",
     }
 )
 
