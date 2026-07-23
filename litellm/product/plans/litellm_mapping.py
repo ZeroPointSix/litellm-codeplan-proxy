@@ -4,11 +4,43 @@ from litellm.product.plans.models import PlanRecord
 
 
 def _drop_none(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: _drop_none(child) for key, child in value.items() if child is not None}
-    if isinstance(value, list):
-        return [_drop_none(child) for child in value]
-    return value
+    if not isinstance(value, (dict, list)):
+        return value
+
+    root: Any = {} if isinstance(value, dict) else []
+    stack: list[tuple[Any, Any]] = [(value, root)]
+
+    while stack:
+        source, target = stack.pop()
+        if isinstance(source, dict):
+            for key, child in source.items():
+                if child is None:
+                    continue
+                if isinstance(child, dict):
+                    cleaned_child: Any = {}
+                    target[key] = cleaned_child
+                    stack.append((child, cleaned_child))
+                elif isinstance(child, list):
+                    cleaned_child = []
+                    target[key] = cleaned_child
+                    stack.append((child, cleaned_child))
+                else:
+                    target[key] = child
+            continue
+
+        for child in source:
+            if isinstance(child, dict):
+                cleaned_child = {}
+                target.append(cleaned_child)
+                stack.append((child, cleaned_child))
+            elif isinstance(child, list):
+                cleaned_child = []
+                target.append(cleaned_child)
+                stack.append((child, cleaned_child))
+            else:
+                target.append(child)
+
+    return root
 
 
 def plan_to_litellm_team_config(plan: Union[PlanRecord, Mapping[str, Any]]) -> dict[str, Any]:
