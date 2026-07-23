@@ -93,6 +93,13 @@ jobs:
             dist: loadscope
             timeout: 20
 
+          # ---- Code Plan product module ----
+          - test-group: code-plan-plans
+            test-path: "tests/proxy_unit_tests/test_code_plan_plans.py"
+            workers: 0
+            dist: loadscope
+            timeout: 10
+
           # ---- auth: split into 2 shards ----
           - test-group: auth-checks
             test-path: >-
