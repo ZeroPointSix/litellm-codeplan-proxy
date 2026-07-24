@@ -96,7 +96,6 @@ class ProxySubscriptionLiteLLMClient:
         key_metadata.update(metadata or {})
         request = GenerateKeyRequest(
             team_id=team_id,
-            project_id=subscription.project_id,
             models=list(subscription.plan_snapshot.allowed_models),
             key_alias=key_alias,
             key_type=LiteLLMKeyType.LLM_API,

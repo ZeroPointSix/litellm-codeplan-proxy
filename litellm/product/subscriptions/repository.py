@@ -20,6 +20,10 @@ class SubscriptionRepository:
         "plan_snapshot": "::jsonb",
         "metadata": "::jsonb",
         "litellm_key_ids": "::text[]",
+        "expires_at": "::timestamp(3)",
+        "renewed_at": "::timestamp(3)",
+        "paused_at": "::timestamp(3)",
+        "canceled_at": "::timestamp(3)",
     }
 
     def __init__(self, prisma_client: Any):
