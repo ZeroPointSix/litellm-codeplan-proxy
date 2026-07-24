@@ -8,6 +8,10 @@ import pytest
 from fastapi import HTTPException
 
 from litellm.product.plans.models import PlanRecord, PlanStatus
+from litellm.product.subscriptions.litellm_client import (
+    CODE_PLAN_GATEWAY_ALLOWED_ROUTES,
+    ProxySubscriptionLiteLLMClient,
+)
 from litellm.product.subscriptions.models import (
     LiteLLMKeyProvision,
     SubscriptionActionRequest,
@@ -23,7 +27,7 @@ from litellm.product.subscriptions.repository import SubscriptionRepository
 from litellm.product.subscriptions.router import CODE_PLAN_SUBSCRIPTION_MANAGEMENT_ROUTES
 from litellm.product.subscriptions.service import SubscriptionService
 from litellm.product.subscriptions.snapshot import plan_snapshot_from_plan
-from litellm.proxy._types import LiteLLMRoutes
+from litellm.proxy._types import LiteLLMRoutes, UserAPIKeyAuth
 from litellm.proxy.auth.route_checks import RouteChecks
 
 
@@ -196,6 +200,18 @@ def test_code_plan_subscription_routes_are_management_routes():
     assert RouteChecks.check_route_access(route="/v1/admin/subscriptions/sub-1/keys/revoke", allowed_routes=management_routes)
 
 
+def test_code_plan_subscription_keys_are_gateway_limited():
+    valid_token = UserAPIKeyAuth(allowed_routes=list(CODE_PLAN_GATEWAY_ALLOWED_ROUTES))
+
+    for route in CODE_PLAN_GATEWAY_ALLOWED_ROUTES:
+        assert RouteChecks.is_virtual_key_allowed_to_call_route(route=route, valid_token=valid_token)
+
+    with pytest.raises(HTTPException) as exc:
+        RouteChecks.is_virtual_key_allowed_to_call_route(route="/v1/embeddings", valid_token=valid_token)
+
+    assert exc.value.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_create_subscription_freezes_snapshot_and_provisions_team_key():
     service, _, plan_repository, litellm_client = _service()
@@ -216,7 +232,14 @@ async def test_create_subscription_freezes_snapshot_and_provisions_team_key():
     stored = await service.get_subscription(subscription.subscription_id)
 
     assert stored.plan_snapshot.quota_5h == 100
-    assert litellm_client.created_teams["team-1"]["metadata"]["code_plan_subscription_id"] == subscription.subscription_id
+
+    team_config = litellm_client.created_teams["team-1"]
+    assert team_config["metadata"]["code_plan_subscription_id"] == subscription.subscription_id
+    assert team_config["models"] == ["anthropic/claude-4-sonnet", "gpt-4.1"]
+    assert team_config["rpm_limit"] == 60
+    assert team_config["tpm_limit"] == 120000
+    assert team_config["max_parallel_requests"] == 4
+    assert team_config["budget_limits"] == [{"budget_duration": "7d", "max_budget": 1000.0}]
     assert litellm_client.generated_keys[0][0] == "team-1"
 
 
@@ -417,3 +440,51 @@ async def test_upgrade_rejects_downgrade_and_creates_new_subscription_for_upgrad
     assert upgraded.subscription.litellm_key_ids == ["key-2"]
     assert litellm_client.revoked_keys == ["key-1"]
     assert litellm_client.updated_teams[-1][0] == "team-1"
+
+
+@pytest.mark.asyncio
+async def test_proxy_client_generates_gateway_limited_key(monkeypatch):
+    from litellm.proxy.management_endpoints import key_management_endpoints
+
+    captured: dict[str, Any] = {}
+
+    async def fake_generate_key_fn(data, user_api_key_dict, litellm_changed_by):
+        captured["request"] = data
+        return {"token_id": "key-live-1", "key": "sk-live-1"}
+
+    monkeypatch.setattr(key_management_endpoints, "generate_key_fn", fake_generate_key_fn)
+    subscription = SubscriptionRecord(
+        subscription_id="sub-1",
+        project_id="project-1",
+        plan_id="plan-basic",
+        status=SubscriptionStatus.ACTIVE,
+        plan_snapshot=plan_snapshot_from_plan(_plan()),
+        litellm_team_id="team-1",
+        litellm_key_ids=[],
+        version=1,
+    )
+
+    provision = await ProxySubscriptionLiteLLMClient().generate_key(
+        "team-1",
+        subscription,
+        key_alias="primary",
+        metadata={"source": "unit-test"},
+    )
+
+    request = captured["request"]
+    budget_limits = [
+        window.model_dump(exclude_none=True) if hasattr(window, "model_dump") else dict(window)
+        for window in request.budget_limits or []
+    ]
+    assert provision.key_id == "key-live-1"
+    assert provision.key == "sk-live-1"
+    assert request.team_id == "team-1"
+    assert request.models == ["anthropic/claude-4-sonnet", "gpt-4.1"]
+    assert request.allowed_routes == CODE_PLAN_GATEWAY_ALLOWED_ROUTES
+    assert request.rpm_limit == 60
+    assert request.tpm_limit == 120000
+    assert request.max_parallel_requests == 4
+    assert request.max_budget == 1000.0
+    assert budget_limits == [{"budget_duration": "7d", "max_budget": 1000.0}]
+    assert request.metadata["code_plan_subscription_id"] == "sub-1"
+    assert request.metadata["source"] == "unit-test"

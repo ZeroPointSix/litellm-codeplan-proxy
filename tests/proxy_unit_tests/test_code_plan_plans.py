@@ -118,10 +118,7 @@ def test_plan_to_litellm_team_config_maps_entitlements():
     assert config["team_alias"] == "Pro Code"
     assert config["models"] == ["anthropic/claude-4-sonnet", "gpt-4.1"]
     assert config["max_budget"] == 1000.0
-    assert config["budget_limits"] == [
-        {"budget_duration": "5h", "max_budget": 100.0},
-        {"budget_duration": "7d", "max_budget": 1000.0},
-    ]
+    assert config["budget_limits"] == [{"budget_duration": "7d", "max_budget": 1000.0}]
     assert config["rpm_limit"] == 60
     assert config["tpm_limit"] == 120000
     assert config["max_parallel_requests"] == 4
