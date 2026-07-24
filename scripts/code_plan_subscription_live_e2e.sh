@@ -19,7 +19,6 @@ request() {
   fi
 }
 
-
 request_with_token() {
   local token="$1" method="$2" path="$3" body="${4:-}"
   if [[ -n "$body" ]]; then
@@ -70,7 +69,7 @@ PLAN_JSON=$(request POST /v1/admin/plans "{
   \"quota_5h\": 100,
   \"quota_weekly\": 1000,
   \"allowed_models\": [\"gpt-4o-mini\"],
-  \"rpm_limit\": 1,
+  \"rpm_limit\": 2,
   \"tpm_limit\": 120000,
   \"max_parallel_requests\": 2,
   \"max_keys\": 2,
@@ -109,7 +108,15 @@ CHAT_RESPONSE=$(request_with_token "$LIVE_KEY" POST /v1/chat/completions "{
 CHAT_JSON=$(assert_http_status "$CHAT_RESPONSE" 200 "subscription chat completion")
 CHAT_REQUEST_ID=$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("id") or "")' <<<"$CHAT_JSON")
 test -n "$CHAT_REQUEST_ID"
-echo "chat request_id present"
+echo "chat request_id=${CHAT_REQUEST_ID}"
+
+echo "== subscription key can call messages =="
+MESSAGES_RESPONSE=$(request_with_token "$LIVE_KEY" POST /v1/messages "{
+  \"model\": \"gpt-4o-mini\",
+  \"messages\": [{\"role\": \"user\", \"content\": \"Return one short word.\"}],
+  \"max_tokens\": 8
+}")
+assert_http_status "$MESSAGES_RESPONSE" 200 "subscription messages" >/dev/null
 
 echo "== disallowed model returns 403 =="
 DENIED_RESPONSE=$(request_with_token "$LIVE_KEY" POST /v1/chat/completions "{
@@ -137,16 +144,16 @@ if ! grep -qi '^retry-after:' "$OVERLIMIT_HEADERS"; then
 fi
 rm -f "$OVERLIMIT_HEADERS" "$OVERLIMIT_BODY"
 
-echo "== spend logs include request_id =="
+echo "== spend logs include chat request_id =="
 for _ in {1..20}; do
   SPEND_JSON=$(request GET "/spend/logs?api_key=${LIVE_KEY}")
-  if REQUEST_ID="$CHAT_REQUEST_ID" python3 -c 'import json,os,sys; data=json.load(sys.stdin); rows=data.get("data", data) if isinstance(data, dict) else data; target=os.environ["REQUEST_ID"]; sys.exit(0 if any(((row.get("request_id") or row.get("requestId")) == target or (row.get("request_id") or row.get("requestId"))) for row in rows if isinstance(row, dict)) else 1)' <<<"$SPEND_JSON"; then
-    echo "spend log request_id present"
+  if REQUEST_ID="$CHAT_REQUEST_ID" python3 -c 'import json,os,sys; data=json.load(sys.stdin); rows=data.get("data", data) if isinstance(data, dict) else data; target=os.environ["REQUEST_ID"]; sys.exit(0 if any((row.get("request_id") or row.get("requestId")) == target for row in rows if isinstance(row, dict)) else 1)' <<<"$SPEND_JSON"; then
+    echo "spend log matched chat request_id"
     break
   fi
   sleep 1
 done
-REQUEST_ID="$CHAT_REQUEST_ID" python3 -c 'import json,sys; data=json.load(sys.stdin); rows=data.get("data", data) if isinstance(data, dict) else data; assert any((row.get("request_id") or row.get("requestId")) for row in rows if isinstance(row, dict)), "SpendLogs missing request_id"' <<<"$SPEND_JSON"
+REQUEST_ID="$CHAT_REQUEST_ID" python3 -c 'import json,os,sys; data=json.load(sys.stdin); rows=data.get("data", data) if isinstance(data, dict) else data; target=os.environ["REQUEST_ID"]; assert any((row.get("request_id") or row.get("requestId")) == target for row in rows if isinstance(row, dict)), "SpendLogs missing matching chat request_id"' <<<"$SPEND_JSON"
 
 echo "== issue second key =="
 ISSUE_JSON=$(request POST "/v1/admin/subscriptions/${LIVE_SUB_ID}/keys" "{
