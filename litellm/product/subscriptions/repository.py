@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -48,7 +48,7 @@ class SubscriptionRepository:
         record = await self.table.create(data=self._serialize(data))
         return self._to_model(record)
 
-    async def get(self, subscription_id: str) -> Optional[SubscriptionRecord]:
+    async def get(self, subscription_id: str) -> SubscriptionRecord | None:
         record = await self.table.find_unique(where={"subscription_id": subscription_id})
         if record is None:
             return None
@@ -56,9 +56,9 @@ class SubscriptionRepository:
 
     async def list(
         self,
-        status: Optional[str] = None,
-        project_id: Optional[str] = None,
-        plan_id: Optional[str] = None,
+        status: str | None = None,
+        project_id: str | None = None,
+        plan_id: str | None = None,
     ) -> list[SubscriptionRecord]:
         where = {}
         if status:
@@ -79,7 +79,7 @@ class SubscriptionRepository:
         subscription_id: str,
         version: int,
         data: dict[str, Any],
-    ) -> Optional[SubscriptionRecord]:
+    ) -> SubscriptionRecord | None:
         record = await self._update_returning_if_version(subscription_id=subscription_id, version=version, data=data)
         if record is None:
             return None
@@ -90,7 +90,7 @@ class SubscriptionRepository:
         subscription_id: str,
         version: int,
         data: dict[str, Any],
-    ) -> Optional[Any]:
+    ) -> Any | None:
         serialized = self._serialize(data)
         columns = list(serialized)
         self._validate_update_columns(columns)
@@ -124,7 +124,7 @@ class SubscriptionRepository:
                 f"Unsupported Code Plan Subscription update column(s): {', '.join(sorted(invalid_columns))}"
             )
 
-    def _first_row(self, rows: Any) -> Optional[Any]:
+    def _first_row(self, rows: Any) -> Any | None:
         if rows is None:
             return None
         if isinstance(rows, (list, tuple)):
