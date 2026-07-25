@@ -2,17 +2,23 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from litellm.product.plans.litellm_mapping import code_plan_credit_budget_limits
 from litellm.product.subscriptions.models import LiteLLMKeyProvision, SubscriptionRecord
 from litellm.proxy._types import (
     GenerateKeyRequest,
     KeyRequest,
     LiteLLMKeyType,
-    LiteLLMRoutes,
     LitellmUserRoles,
     NewTeamRequest,
     UpdateTeamRequest,
     UserAPIKeyAuth,
 )
+
+CODE_PLAN_GATEWAY_ALLOWED_ROUTES = [
+    "/v1/chat/completions",
+    "/v1/messages",
+    "/v1/models",
+]
 
 
 class SubscriptionLiteLLMClient(Protocol):
@@ -102,8 +108,10 @@ class ProxySubscriptionLiteLLMClient:
             rpm_limit=subscription.plan_snapshot.rpm_limit,
             tpm_limit=subscription.plan_snapshot.tpm_limit,
             max_parallel_requests=subscription.plan_snapshot.max_parallel_requests,
+            max_budget=float(subscription.plan_snapshot.quota_weekly),
+            budget_limits=code_plan_credit_budget_limits(subscription.plan_snapshot.quota_weekly),
             metadata=key_metadata,
-            allowed_routes=list(LiteLLMRoutes.llm_api_routes.value),
+            allowed_routes=list(CODE_PLAN_GATEWAY_ALLOWED_ROUTES),
         )
         response = await generate_key_fn(
             data=request,

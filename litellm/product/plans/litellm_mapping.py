@@ -2,6 +2,15 @@ from typing import Any, Mapping, Union
 
 from litellm.product.plans.models import PlanRecord
 
+CODE_PLAN_CREDIT_BUDGET_DURATION = "7d"
+
+
+def code_plan_credit_budget_limits(quota_weekly: int) -> list[dict[str, str | float]]:
+    """Map Code Plan credits 1:1 onto a single LiteLLM budget window."""
+    return [
+        {"budget_duration": CODE_PLAN_CREDIT_BUDGET_DURATION, "max_budget": float(quota_weekly)},
+    ]
+
 
 def _drop_none(value: Any) -> Any:
     if not isinstance(value, (dict, list)):
@@ -52,10 +61,7 @@ def plan_to_litellm_team_config(plan: Union[PlanRecord, Mapping[str, Any]]) -> d
             "team_alias": plan_record.name,
             "models": list(plan_record.allowed_models),
             "max_budget": float(plan_record.quota_weekly),
-            "budget_limits": [
-                {"budget_duration": "5h", "max_budget": float(plan_record.quota_5h)},
-                {"budget_duration": "7d", "max_budget": float(plan_record.quota_weekly)},
-            ],
+            "budget_limits": code_plan_credit_budget_limits(plan_record.quota_weekly),
             "rpm_limit": plan_record.rpm_limit,
             "tpm_limit": plan_record.tpm_limit,
             "max_parallel_requests": plan_record.max_parallel_requests,
