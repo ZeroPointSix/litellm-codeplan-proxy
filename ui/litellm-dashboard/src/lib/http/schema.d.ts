@@ -13789,6 +13789,7 @@ export interface paths {
          *     - metadata: Optional[dict] - Metadata for team, store information for team. Example metadata = {"team": "core-infra", "app": "app2", "email": "ishaan@berri.ai" }
          *     - tpm_limit: Optional[int] - The TPM (Tokens Per Minute) limit for this team - all keys with this team_id will have at max this TPM limit
          *     - rpm_limit: Optional[int] - The RPM (Requests Per Minute) limit for this team - all keys associated with this team_id will have at max this RPM limit
+         *     - mcp_rpm_limit: Optional[Dict[str, int]] - Per-MCP-server RPM limit for this team, keyed by MCP server name. Example: {"github": 100, "slack": 200}.
          *     - max_budget: Optional[float] - The maximum budget allocated to the team - all keys for this team_id will have at max this max_budget
          *     - soft_budget: Optional[float] - The soft budget threshold for the team. If max_budget is set (either in the request or existing), soft_budget must be strictly lower than max_budget. Can be set independently if max_budget is not set.
          *     - budget_duration: Optional[str] - The duration of the budget for the team. Doc [here](https://docs.litellm.ai/docs/proxy/team_budgets)
@@ -15166,6 +15167,160 @@ export interface paths {
         put?: never;
         /** Archive Plan */
         post: operations["archive_plan_v1_admin_plans__plan_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Subscriptions */
+        get: operations["list_subscriptions_v1_admin_subscriptions_get"];
+        put?: never;
+        /** Create Subscription */
+        post: operations["create_subscription_v1_admin_subscriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Subscription */
+        get: operations["get_subscription_v1_admin_subscriptions__subscription_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Subscription */
+        post: operations["cancel_subscription_v1_admin_subscriptions__subscription_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/expire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Expire Subscription */
+        post: operations["expire_subscription_v1_admin_subscriptions__subscription_id__expire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Subscription Key */
+        post: operations["issue_subscription_key_v1_admin_subscriptions__subscription_id__keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/keys/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Subscription Key */
+        post: operations["revoke_subscription_key_v1_admin_subscriptions__subscription_id__keys_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Subscription */
+        post: operations["pause_subscription_v1_admin_subscriptions__subscription_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renew Subscription */
+        post: operations["renew_subscription_v1_admin_subscriptions__subscription_id__renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/upgrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upgrade Subscription */
+        post: operations["upgrade_subscription_v1_admin_subscriptions__subscription_id__upgrade_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -29207,6 +29362,49 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** PlanSnapshot */
+        PlanSnapshot: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at?: string;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Credit Rule Version */
+            credit_rule_version?: number | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Plan Version */
+            plan_version: number;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+        };
         /**
          * PlanStatus
          * @enum {string}
@@ -31225,6 +31423,150 @@ export interface components {
              * @default 0
              */
             total_tokens: number;
+        };
+        /** SubscriptionActionRequest */
+        SubscriptionActionRequest: {
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionCreateRequest */
+        SubscriptionCreateRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plan Id */
+            plan_id: string;
+            /** Project Id */
+            project_id: string;
+        };
+        /** SubscriptionIssueKeyRequest */
+        SubscriptionIssueKeyRequest: {
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionListResponse */
+        SubscriptionListResponse: {
+            /** Data */
+            data: components["schemas"]["SubscriptionRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** SubscriptionProvisionResponse */
+        SubscriptionProvisionResponse: {
+            /** Key */
+            key?: string | null;
+            /** Key Id */
+            key_id?: string | null;
+            subscription: components["schemas"]["SubscriptionRecord"];
+            /** Token Id */
+            token_id?: string | null;
+        };
+        /** SubscriptionRecord */
+        SubscriptionRecord: {
+            /** Canceled At */
+            canceled_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Litellm Key Ids */
+            litellm_key_ids?: string[];
+            /** Litellm Team Id */
+            litellm_team_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Paused At */
+            paused_at?: string | null;
+            /** Plan Id */
+            plan_id: string;
+            plan_snapshot: components["schemas"]["PlanSnapshot"];
+            /** Project Id */
+            project_id: string;
+            /** Renewed At */
+            renewed_at?: string | null;
+            /** @default active */
+            status: components["schemas"]["SubscriptionStatus"];
+            /** Subscription Id */
+            subscription_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionRenewRequest */
+        SubscriptionRenewRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionRevokeKeyRequest */
+        SubscriptionRevokeKeyRequest: {
+            /** Key Id */
+            key_id: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * SubscriptionStatus
+         * @enum {string}
+         */
+        SubscriptionStatus: "active" | "paused" | "canceled" | "expired";
+        /** SubscriptionUpgradeRequest */
+        SubscriptionUpgradeRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plan Id */
+            plan_id: string;
+            /** Version */
+            version: number;
         };
         /**
          * SuccessfulKeyUpdate
@@ -52813,6 +53155,348 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subscriptions_v1_admin_subscriptions_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SubscriptionStatus"] | null;
+                project_id?: string | null;
+                plan_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_subscription_v1_admin_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_v1_admin_subscriptions__subscription_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_subscription_v1_admin_subscriptions__subscription_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    expire_subscription_v1_admin_subscriptions__subscription_id__expire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_subscription_key_v1_admin_subscriptions__subscription_id__keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionIssueKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_subscription_key_v1_admin_subscriptions__subscription_id__keys_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionRevokeKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_subscription_v1_admin_subscriptions__subscription_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_subscription_v1_admin_subscriptions__subscription_id__renew_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionRenewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upgrade_subscription_v1_admin_subscriptions__subscription_id__upgrade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionUpgradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
                 };
             };
             /** @description Validation Error */

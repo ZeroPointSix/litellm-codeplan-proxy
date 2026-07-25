@@ -55,6 +55,7 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     # Code Plan admin
     "/v1/admin/plans/",
     "/v1/admin/credit-rules/",
+    "/v1/admin/subscriptions/",
     # Tools / agents (registry & policy admin)
     "/v1/tool/",
     "/v1/agents",
@@ -142,6 +143,7 @@ BACKEND_EXACT_PATHS: frozenset[str] = frozenset(
         "/fallback/login",
         "/v1/admin/plans",
         "/v1/admin/credit-rules",
+        "/v1/admin/subscriptions",
     }
 )
 
