@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from litellm.product.credit_rules.repository import CreditRuleRepository
@@ -44,6 +46,9 @@ _register_management_routes()
 
 router = APIRouter(prefix="/v1/admin/subscriptions", tags=["Code Plan Subscription"])
 
+AdminUser = Annotated[UserAPIKeyAuth, Depends(user_api_key_auth)]
+StatusFilter = Annotated[SubscriptionStatus | None, Query(alias="status")]
+
 
 def _require_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> None:
     user_role = getattr(user_api_key_dict, "user_role", None)
@@ -70,7 +75,7 @@ def _get_service() -> SubscriptionService:
 @router.post("", response_model=SubscriptionProvisionResponse)
 async def create_subscription(
     data: SubscriptionCreateRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().create_subscription(data, actor=user_api_key_dict)
@@ -78,10 +83,10 @@ async def create_subscription(
 
 @router.get("", response_model=SubscriptionListResponse)
 async def list_subscriptions(
-    status_filter: SubscriptionStatus | None = Query(default=None, alias="status"),
+    user_api_key_dict: AdminUser,
+    status_filter: StatusFilter = None,
     project_id: str | None = None,
     plan_id: str | None = None,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
 ):
     _require_proxy_admin(user_api_key_dict)
     subscriptions = await _get_service().list_subscriptions(
@@ -95,7 +100,7 @@ async def list_subscriptions(
 @router.get("/{subscription_id}", response_model=SubscriptionRecord)
 async def get_subscription(
     subscription_id: str,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().get_subscription(subscription_id)
@@ -105,7 +110,7 @@ async def get_subscription(
 async def renew_subscription(
     subscription_id: str,
     data: SubscriptionRenewRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().renew_subscription(subscription_id, data, actor=user_api_key_dict)
@@ -115,7 +120,7 @@ async def renew_subscription(
 async def pause_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().pause_subscription(subscription_id, data, actor=user_api_key_dict)
@@ -125,7 +130,7 @@ async def pause_subscription(
 async def cancel_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().cancel_subscription(subscription_id, data, actor=user_api_key_dict)
@@ -135,7 +140,7 @@ async def cancel_subscription(
 async def expire_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().expire_subscription(subscription_id, data, actor=user_api_key_dict)
@@ -145,7 +150,7 @@ async def expire_subscription(
 async def upgrade_subscription(
     subscription_id: str,
     data: SubscriptionUpgradeRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().upgrade_subscription(subscription_id, data, actor=user_api_key_dict)
@@ -155,7 +160,7 @@ async def upgrade_subscription(
 async def issue_subscription_key(
     subscription_id: str,
     data: SubscriptionIssueKeyRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().issue_key(subscription_id, data, actor=user_api_key_dict)
@@ -165,7 +170,7 @@ async def issue_subscription_key(
 async def revoke_subscription_key(
     subscription_id: str,
     data: SubscriptionRevokeKeyRequest,
-    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    user_api_key_dict: AdminUser,
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().revoke_key(subscription_id, data, actor=user_api_key_dict)
