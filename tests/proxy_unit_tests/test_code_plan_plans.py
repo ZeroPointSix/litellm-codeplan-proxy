@@ -110,23 +110,27 @@ def test_plan_to_litellm_team_config_maps_entitlements():
         max_keys=7,
         default_max_output_tokens=4096,
         credit_rule_id="rule-1",
-        metadata={"tier": "pro"},
+        metadata={"tier": "pro", "quota_monthly": 4000},
     )
 
     config = plan_to_litellm_team_config(plan)
 
     assert config["team_alias"] == "Pro Code"
     assert config["models"] == ["anthropic/claude-4-sonnet", "gpt-4.1"]
-    assert config["max_budget"] == 1000.0
-    assert config["budget_limits"] == [{"budget_duration": "7d", "max_budget": 1000.0}]
+    assert "max_budget" not in config
+    assert "budget_limits" not in config
     assert config["rpm_limit"] == 60
     assert config["tpm_limit"] == 120000
     assert config["max_parallel_requests"] == 4
     assert config["metadata"]["code_plan_id"] == "plan-1"
     assert config["metadata"]["code_plan_version"] == 3
+    assert config["metadata"]["code_plan_quota_5h"] == 100
+    assert config["metadata"]["code_plan_quota_weekly"] == 1000
+    assert config["metadata"]["code_plan_quota_monthly"] == 4000
     assert config["metadata"]["code_plan_max_keys"] == 7
     assert config["metadata"]["code_plan_default_max_output_tokens"] == 4096
     assert config["metadata"]["code_plan_credit_rule_id"] == "rule-1"
+    assert config["metadata"]["code_plan_native_budget_disabled"] is True
 
 
 def test_code_plan_routes_are_management_routes():
