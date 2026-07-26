@@ -29,9 +29,13 @@ class QuotaUnavailableError(Exception):
 
 
 class QuotaStore(Protocol):
-    async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision: ...
+    async def reserve(
+        self, request: QuotaReserveRequest, reserved_credits: float
+    ) -> QuotaDecision: ...
 
-    async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision: ...
+    async def settle(
+        self, request: QuotaSettlementRequest, settled_credits: float
+    ) -> QuotaDecision: ...
 
 
 def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> float:
@@ -70,12 +74,24 @@ def settlement_usage_for_failure(
 
 def quota_windows_from_metadata(metadata: Mapping[str, object]) -> list[QuotaWindow]:
     windows = [
-        QuotaWindow(name="5h", limit=float(metadata["code_plan_quota_5h"]), ttl_seconds=FIVE_HOURS_SECONDS),
-        QuotaWindow(name="week", limit=float(metadata["code_plan_quota_weekly"]), ttl_seconds=WEEK_SECONDS),
+        QuotaWindow(
+            name="5h",
+            limit=float(metadata["code_plan_quota_5h"]),
+            ttl_seconds=FIVE_HOURS_SECONDS,
+        ),
+        QuotaWindow(
+            name="week",
+            limit=float(metadata["code_plan_quota_weekly"]),
+            ttl_seconds=WEEK_SECONDS,
+        ),
     ]
     monthly_limit = metadata.get("code_plan_quota_monthly")
     if monthly_limit is not None:
-        windows.append(QuotaWindow(name="month", limit=float(monthly_limit), ttl_seconds=MONTH_SECONDS))
+        windows.append(
+            QuotaWindow(
+                name="month", limit=float(monthly_limit), ttl_seconds=MONTH_SECONDS
+            )
+        )
     return windows
 
 
@@ -85,7 +101,9 @@ class InMemoryQuotaStore:
         self.events: dict[tuple[str, str, QuotaEventType], QuotaDecision] = {}
         self.reservations: dict[tuple[str, str], float] = {}
 
-    async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
+    async def reserve(
+        self, request: QuotaReserveRequest, reserved_credits: float
+    ) -> QuotaDecision:
         event_key = (request.subscription_id, request.request_id, QuotaEventType.RESERVE)
         if event_key in self.events:
             return self.events[event_key].model_copy(update={"idempotent": True})
@@ -107,7 +125,8 @@ class InMemoryQuotaStore:
 
         for window in request.windows:
             self.spent[(request.subscription_id, window.name)] = (
-                self.spent.get((request.subscription_id, window.name), 0.0) + reserved_credits
+                self.spent.get((request.subscription_id, window.name), 0.0)
+                + reserved_credits
             )
         balances_after = self._balances_before(request.subscription_id, request.windows)
         self.reservations[(request.subscription_id, request.request_id)] = reserved_credits
@@ -124,7 +143,9 @@ class InMemoryQuotaStore:
         self.events[event_key] = decision
         return decision
 
-    async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision:
+    async def settle(
+        self, request: QuotaSettlementRequest, settled_credits: float
+    ) -> QuotaDecision:
         event_key = (request.subscription_id, request.request_id, request.event_type)
         if event_key in self.events:
             return self.events[event_key].model_copy(update={"idempotent": True})
@@ -152,9 +173,12 @@ class InMemoryQuotaStore:
         self.events[event_key] = decision
         return decision
 
-    def _balances_before(self, subscription_id: str, windows: list[QuotaWindow]) -> dict[str, float]:
+    def _balances_before(
+        self, subscription_id: str, windows: list[QuotaWindow]
+    ) -> dict[str, float]:
         return {
-            window.name: window.limit - self.spent.get((subscription_id, window.name), 0.0)
+            window.name: window.limit
+            - self.spent.get((subscription_id, window.name), 0.0)
             for window in windows
         }
 
