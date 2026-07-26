@@ -47,7 +47,9 @@ def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> flo
     )
 
 
-def reserve_usage(input_usage: CreditUsage, default_max_output_tokens: int) -> CreditUsage:
+def reserve_usage(
+    input_usage: CreditUsage, default_max_output_tokens: int
+) -> CreditUsage:
     return CreditUsage(
         input_tokens=input_usage.input_tokens,
         output_tokens=default_max_output_tokens,
@@ -104,11 +106,17 @@ class InMemoryQuotaStore:
     async def reserve(
         self, request: QuotaReserveRequest, reserved_credits: float
     ) -> QuotaDecision:
-        event_key = (request.subscription_id, request.request_id, QuotaEventType.RESERVE)
+        event_key = (
+            request.subscription_id,
+            request.request_id,
+            QuotaEventType.RESERVE,
+        )
         if event_key in self.events:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
-        balances_before = self._balances_before(request.subscription_id, request.windows)
+        balances_before = self._balances_before(
+            request.subscription_id, request.windows
+        )
         if any(balance <= 0 for balance in balances_before.values()):
             decision = QuotaDecision(
                 allowed=False,
@@ -128,8 +136,12 @@ class InMemoryQuotaStore:
                 self.spent.get((request.subscription_id, window.name), 0.0)
                 + reserved_credits
             )
-        balances_after = self._balances_before(request.subscription_id, request.windows)
-        self.reservations[(request.subscription_id, request.request_id)] = reserved_credits
+        balances_after = self._balances_before(
+            request.subscription_id, request.windows
+        )
+        self.reservations[
+            (request.subscription_id, request.request_id)
+        ] = reserved_credits
         decision = QuotaDecision(
             allowed=True,
             request_id=request.request_id,
@@ -151,14 +163,20 @@ class InMemoryQuotaStore:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
         reservation_key = (request.subscription_id, request.request_id)
-        reserved_credits = self.reservations.get(reservation_key, request.reserved_credits)
-        balances_before = self._balances_before(request.subscription_id, request.windows)
+        reserved_credits = self.reservations.get(
+            reservation_key, request.reserved_credits
+        )
+        balances_before = self._balances_before(
+            request.subscription_id, request.windows
+        )
         delta = settled_credits - reserved_credits
         for window in request.windows:
             self.spent[(request.subscription_id, window.name)] = (
                 self.spent.get((request.subscription_id, window.name), 0.0) + delta
             )
-        balances_after = self._balances_before(request.subscription_id, request.windows)
+        balances_after = self._balances_before(
+            request.subscription_id, request.windows
+        )
         self.reservations.pop(reservation_key, None)
         decision = QuotaDecision(
             allowed=True,
