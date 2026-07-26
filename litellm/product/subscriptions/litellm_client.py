@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from litellm.product.plans.litellm_mapping import code_plan_credit_budget_limits
 from litellm.product.subscriptions.models import LiteLLMKeyProvision, SubscriptionRecord
 from litellm.proxy._types import (
     GenerateKeyRequest,
@@ -98,7 +97,20 @@ class ProxySubscriptionLiteLLMClient:
             "code_plan_project_id": subscription.project_id,
             "code_plan_id": subscription.plan_id,
             "code_plan_version": subscription.plan_snapshot.plan_version,
+            "code_plan_quota_5h": subscription.plan_snapshot.quota_5h,
+            "code_plan_quota_weekly": subscription.plan_snapshot.quota_weekly,
+            "code_plan_default_max_output_tokens": subscription.plan_snapshot.default_max_output_tokens,
+            "code_plan_credit_rule_id": subscription.plan_snapshot.credit_rule_id,
+            "code_plan_credit_rule_version": subscription.plan_snapshot.credit_rule_version,
+            "code_plan_credit_input_multiplier": subscription.plan_snapshot.credit_input_multiplier,
+            "code_plan_credit_output_multiplier": subscription.plan_snapshot.credit_output_multiplier,
+            "code_plan_credit_cache_read_multiplier": subscription.plan_snapshot.credit_cache_read_multiplier,
+            "code_plan_credit_cache_write_multiplier": subscription.plan_snapshot.credit_cache_write_multiplier,
+            "code_plan_native_budget_disabled": True,
         }
+        quota_monthly = subscription.plan_snapshot.metadata.get("quota_monthly")
+        if quota_monthly is not None:
+            key_metadata["code_plan_quota_monthly"] = quota_monthly
         key_metadata.update(metadata or {})
         request = GenerateKeyRequest(
             team_id=team_id,
@@ -108,8 +120,6 @@ class ProxySubscriptionLiteLLMClient:
             rpm_limit=subscription.plan_snapshot.rpm_limit,
             tpm_limit=subscription.plan_snapshot.tpm_limit,
             max_parallel_requests=subscription.plan_snapshot.max_parallel_requests,
-            max_budget=float(subscription.plan_snapshot.quota_weekly),
-            budget_limits=code_plan_credit_budget_limits(subscription.plan_snapshot.quota_weekly),
             metadata=key_metadata,
             allowed_routes=list(CODE_PLAN_GATEWAY_ALLOWED_ROUTES),
         )
