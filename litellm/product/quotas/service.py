@@ -130,7 +130,19 @@ class InMemoryQuotaStore:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
         reservation_key = (request.subscription_id, request.request_id)
-        reserved_credits = self.reservations.get(reservation_key, request.reserved_credits)
+        if reservation_key not in self.reservations:
+            return QuotaDecision(
+                allowed=False,
+                request_id=request.request_id,
+                subscription_id=request.subscription_id,
+                project_id=request.project_id,
+                event_type=request.event_type,
+                credits=settled_credits,
+                balances_before={},
+                balances_after={},
+                reason="Quota reservation not found",
+            )
+        reserved_credits = self.reservations[reservation_key]
         balances_before = self._balances_before(request.subscription_id, request.windows)
         delta = settled_credits - reserved_credits
         for window in request.windows:

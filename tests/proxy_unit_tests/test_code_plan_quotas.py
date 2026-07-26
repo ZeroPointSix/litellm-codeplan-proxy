@@ -1,3 +1,4 @@
+import asyncio
 import os
 from uuid import uuid4
 
@@ -454,6 +455,79 @@ def test_quota_hook_token_counter_failure_uses_text_fallback(monkeypatch):
     )
 
     assert estimate > 0
+
+
+@pytest.mark.asyncio
+async def test_settle_without_reservation_returns_not_allowed():
+    service = QuotaService(InMemoryQuotaStore())
+    decision = await service.settle(
+        QuotaSettlementRequest(
+            request_id="req-missing",
+            subscription_id="sub-1",
+            actual_usage=CreditUsage(input_tokens=1),
+            multipliers=CreditMultipliers(),
+            windows=_windows(),
+            reserved_credits=10,
+        )
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "Quota reservation not found"
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_does_not_mark_settled_when_store_rejects_settlement(monkeypatch):
+    class RejectingStore(InMemoryQuotaStore):
+        async def settle(self, request, settled_credits):
+            return await super().settle(request, settled_credits)
+
+    store = RejectingStore()
+    store.reservations.clear()
+    handler = _PROXY_CodePlanQuotaHandler(QuotaService(store))
+    user_api_key = _UserKey(metadata=_code_plan_metadata())
+    reservation = {
+        "request_id": "req-reject-settle",
+        "subscription_id": "sub-1",
+        "project_id": "project-1",
+        "reserved_credits": 10.0,
+        "input_usage": {"input_tokens": 10, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0},
+        "multipliers": CreditMultipliers().model_dump(),
+        "windows": [window.model_dump() for window in _windows()],
+    }
+    data = {"metadata": {CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY: reservation}}
+
+    await handler._settle_reserved_usage(
+        data=data,
+        metadata=user_api_key.metadata,
+        reservation=reservation,
+        actual_usage=CreditUsage(input_tokens=10, output_tokens=5),
+        event_type=QuotaEventType.SETTLE,
+        context="test",
+    )
+
+    assert reservation.get("_code_plan_quota_settled") is not True
+
+
+@pytest.mark.asyncio
+async def test_proxy_logging_disconnect_schedules_code_plan_quota_release():
+    from litellm.proxy.hooks.code_plan_quota import _PROXY_CodePlanQuotaHandler
+    from litellm.proxy.utils import ProxyLogging
+
+    quota_hook = _PROXY_CodePlanQuotaHandler(QuotaService(InMemoryQuotaStore()))
+    proxy_logging = ProxyLogging(user_api_key_cache=None)
+    proxy_logging.proxy_hook_mapping["code_plan_quota"] = quota_hook
+    scheduled: list[str] = []
+
+    async def _track_release(user_api_key_dict):
+        scheduled.append("quota")
+
+    quota_hook.async_release_max_parallel_requests_on_disconnect = _track_release
+
+    user_api_key = _UserKey(metadata=_code_plan_metadata())
+    proxy_logging._release_max_parallel_requests_on_disconnect(user_api_key)
+    await asyncio.sleep(0)
+
+    assert scheduled == ["quota"]
 
 
 @pytest.mark.asyncio

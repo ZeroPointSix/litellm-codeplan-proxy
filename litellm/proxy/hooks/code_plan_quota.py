@@ -249,6 +249,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 decision.request_id,
                 decision.reason,
             )
+            return
         self._mark_reservation_settled(data, reservation)
 
     def _settlement_request(
