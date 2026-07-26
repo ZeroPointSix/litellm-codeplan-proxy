@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from litellm.product.quotas.models import (
     QuotaDecision,
@@ -165,7 +164,7 @@ return encoded
 
 
 class RedisQuotaStore:
-    def __init__(self, redis_client: Any, *, key_prefix: str = "codeplan:quota", event_ttl_seconds: int = 86400):
+    def __init__(self, redis_client: object, *, key_prefix: str = "codeplan:quota", event_ttl_seconds: int = 86400):
         self.redis_client = redis_client
         self.key_prefix = key_prefix.rstrip(":")
         self.event_ttl_seconds = event_ttl_seconds

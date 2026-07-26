@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -82,6 +81,6 @@ class QuotaDecision(BaseModel):
     balances_after: dict[str, float] = Field(default_factory=dict)
     idempotent: bool = False
     reason: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, object] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="forbid")

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
 from uuid import uuid4
 
-import litellm
 from fastapi import HTTPException, status
 
+import litellm
 from litellm._logging import verbose_proxy_logger
 from litellm.caching.caching import DualCache
 from litellm.integrations.custom_logger import CustomLogger
@@ -108,8 +107,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         self,
         data: dict,
         user_api_key_dict: UserAPIKeyAuth,
-        response: Any,
-    ) -> Any:
+        response: object,
+    ) -> object:
         metadata = self._key_metadata(user_api_key_dict)
         reservation = self._reservation_metadata(data, metadata)
         await self._settle_reserved_usage(
@@ -220,9 +219,9 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
     async def _settle_reserved_usage(
         self,
         *,
-        data: Any,
-        metadata: dict[str, Any],
-        reservation: dict[str, Any] | None,
+        data: object,
+        metadata: dict[str, object],
+        reservation: dict[str, object] | None,
         actual_usage: CreditUsage,
         event_type: QuotaEventType,
         context: str,
@@ -238,7 +237,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 event_type=event_type,
             )
             decision = await self._service().settle(settlement)
-        except Exception as exc:
+        except QuotaUnavailableError as exc:
             verbose_proxy_logger.exception(f"Code Plan quota settlement failed during {context}: {exc}")
             return
 
@@ -255,8 +254,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
     def _settlement_request(
         self,
         *,
-        metadata: dict[str, Any],
-        reservation: dict[str, Any],
+        metadata: dict[str, object],
+        reservation: dict[str, object],
         actual_usage: CreditUsage,
         event_type: QuotaEventType,
     ) -> QuotaSettlementRequest:
@@ -271,7 +270,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             event_type=event_type,
         )
 
-    def _has_required_quota_metadata(self, metadata: dict[str, Any]) -> bool:
+    def _has_required_quota_metadata(self, metadata: dict[str, object]) -> bool:
         return (
             "code_plan_subscription_id" in metadata
             and "code_plan_quota_5h" in metadata
@@ -280,8 +279,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
     def _reservation_multipliers(
         self,
-        reservation: dict[str, Any],
-        metadata: dict[str, Any],
+        reservation: dict[str, object],
+        metadata: dict[str, object],
     ) -> CreditMultipliers:
         multipliers = reservation.get("multipliers")
         if isinstance(multipliers, dict):
@@ -290,25 +289,25 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
     def _reservation_windows(
         self,
-        reservation: dict[str, Any],
-        metadata: dict[str, Any],
+        reservation: dict[str, object],
+        metadata: dict[str, object],
     ) -> list[QuotaWindow]:
         windows = reservation.get("windows")
         if isinstance(windows, list) and windows:
             return [QuotaWindow.model_validate(window) for window in windows]
         return quota_windows_from_metadata(metadata)
 
-    def _key_metadata(self, user_api_key_dict: Any) -> dict[str, Any]:
+    def _key_metadata(self, user_api_key_dict: object) -> dict[str, object]:
         metadata = getattr(user_api_key_dict, "metadata", None)
         return metadata if isinstance(metadata, dict) else {}
 
-    def _set_key_metadata_value(self, user_api_key_dict: UserAPIKeyAuth, key: str, value: Any) -> None:
+    def _set_key_metadata_value(self, user_api_key_dict: UserAPIKeyAuth, key: str, value: object) -> None:
         metadata = getattr(user_api_key_dict, "metadata", None)
         if isinstance(metadata, dict):
             metadata[key] = value
 
     @staticmethod
-    def _stash_value_in_metadata_channels(data: dict[str, Any], key: str, value: Any) -> None:
+    def _stash_value_in_metadata_channels(data: dict[str, object], key: str, value: object) -> None:
         for channel in ("metadata", "litellm_metadata"):
             existing = data.get(channel)
             if isinstance(existing, dict):
@@ -316,14 +315,14 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             elif channel == "metadata":
                 data[channel] = {key: value}
 
-    def _reservation_metadata(self, data: dict, metadata: dict[str, Any]) -> dict[str, Any] | None:
+    def _reservation_metadata(self, data: dict, metadata: dict[str, object]) -> dict[str, object] | None:
         reservation = self._lookup_stashed_value(data, None, CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY)
         if isinstance(reservation, dict):
             return reservation
         reservation = metadata.get(CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY)
         return reservation if isinstance(reservation, dict) else None
 
-    def _reservation_from_logging_kwargs(self, kwargs: Any) -> dict[str, Any] | None:
+    def _reservation_from_logging_kwargs(self, kwargs: object) -> dict[str, object] | None:
         standard_logging_metadata = self._standard_logging_metadata(kwargs)
         reservation = self._lookup_stashed_value(
             kwargs,
@@ -340,8 +339,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 return self._reservation_metadata({}, metadata)
         return None
 
-    def _metadata_from_logging_kwargs(self, kwargs: Any) -> dict[str, Any]:
-        metadata: dict[str, Any] = {}
+    def _metadata_from_logging_kwargs(self, kwargs: object) -> dict[str, object]:
+        metadata: dict[str, object] = {}
         if isinstance(kwargs, dict):
             for channel in ("metadata", "litellm_metadata"):
                 channel_dict = kwargs.get(channel)
@@ -360,7 +359,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         return metadata
 
     @staticmethod
-    def _standard_logging_metadata(kwargs: Any) -> dict[str, Any] | None:
+    def _standard_logging_metadata(kwargs: object) -> dict[str, object] | None:
         if not isinstance(kwargs, dict):
             return None
         standard_logging_object = kwargs.get("standard_logging_object")
@@ -371,11 +370,11 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
     @staticmethod
     def _lookup_stashed_value(
-        kwargs: Any,
-        standard_logging_metadata: dict[str, Any] | None,
+        kwargs: object,
+        standard_logging_metadata: dict[str, object] | None,
         key: str,
-    ) -> Any:
-        candidate: Any = None
+    ) -> object:
+        candidate: object = None
         if isinstance(kwargs, dict):
             for channel in ("metadata", "litellm_metadata"):
                 channel_dict = kwargs.get(channel)
@@ -392,7 +391,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             candidate = standard_logging_metadata.get(key)
         return candidate
 
-    def _is_reservation_settled(self, data: Any, reservation: dict[str, Any]) -> bool:
+    def _is_reservation_settled(self, data: object, reservation: dict[str, object]) -> bool:
         if bool(reservation.get(CODE_PLAN_QUOTA_SETTLED_METADATA_KEY)):
             return True
         return bool(
@@ -403,7 +402,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             )
         )
 
-    def _mark_reservation_settled(self, data: Any, reservation: dict[str, Any]) -> None:
+    def _mark_reservation_settled(self, data: object, reservation: dict[str, object]) -> None:
         reservation[CODE_PLAN_QUOTA_SETTLED_METADATA_KEY] = True
         if not isinstance(data, dict):
             return
@@ -428,12 +427,12 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             self._mark_nested_reservation_settled(standard_logging_metadata)
 
     @staticmethod
-    def _mark_nested_reservation_settled(metadata: dict[str, Any]) -> None:
+    def _mark_nested_reservation_settled(metadata: dict[str, object]) -> None:
         reservation = metadata.get(CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY)
         if isinstance(reservation, dict):
             reservation[CODE_PLAN_QUOTA_SETTLED_METADATA_KEY] = True
 
-    def _request_id(self, metadata: dict[str, Any]) -> str:
+    def _request_id(self, metadata: dict[str, object]) -> str:
         request_id = (
             metadata.get(CODE_PLAN_REQUEST_ID_METADATA_KEY)
             or metadata.get("request_id")
@@ -442,7 +441,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         )
         return str(request_id)
 
-    def _multipliers(self, metadata: dict[str, Any]) -> CreditMultipliers:
+    def _multipliers(self, metadata: dict[str, object]) -> CreditMultipliers:
         return CreditMultipliers(
             input_multiplier=self._float(metadata.get("code_plan_credit_input_multiplier"), 1.0),
             output_multiplier=self._float(metadata.get("code_plan_credit_output_multiplier"), 1.0),
@@ -462,7 +461,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 return int(litellm.token_counter(model=model, text=str(data.get("prompt"))))
             if data.get("input") is not None:
                 return int(litellm.token_counter(model=model, text=str(data.get("input"))))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001  # litellm.token_counter raises provider-specific errors
             estimate = self._fallback_input_token_estimate(data)
             verbose_proxy_logger.debug(
                 "Code Plan quota token estimation used fallback estimate=%s error=%s",
@@ -479,7 +478,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 return self._serialized_token_estimate(value)
         return 0
 
-    def _serialized_token_estimate(self, value: Any) -> int:
+    def _serialized_token_estimate(self, value: object) -> int:
         try:
             serialized = json.dumps(value, default=str, separators=(",", ":"))
         except (TypeError, ValueError):
@@ -488,11 +487,11 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             return 0
         return max(1, (len(serialized) + DEFAULT_CHARS_PER_TOKEN - 1) // DEFAULT_CHARS_PER_TOKEN)
 
-    def _usage_from_response(self, response: Any) -> CreditUsage:
+    def _usage_from_response(self, response: object) -> CreditUsage:
         usage = self._usage_object(response)
         return self._usage_from_usage_object(usage)
 
-    def _usage_from_usage_object(self, usage: Any) -> CreditUsage:
+    def _usage_from_usage_object(self, usage: object) -> CreditUsage:
         return CreditUsage(
             input_tokens=self._usage_int(usage, "prompt_tokens", "input_tokens"),
             output_tokens=self._usage_int(usage, "completion_tokens", "output_tokens"),
@@ -510,12 +509,12 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             ),
         )
 
-    def _usage_object(self, response: Any) -> Any:
+    def _usage_object(self, response: object) -> object:
         if isinstance(response, dict):
             return response.get("usage") or {}
         return getattr(response, "usage", {}) or {}
 
-    def _recovered_failure_usage(self, kwargs: Any) -> CreditUsage | None:
+    def _recovered_failure_usage(self, kwargs: object) -> CreditUsage | None:
         if not isinstance(kwargs, dict):
             return None
         combined_usage = kwargs.get("combined_usage_object")
@@ -523,14 +522,14 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             return None
         return self._usage_from_usage_object(combined_usage)
 
-    def _usage_int(self, usage: Any, *names: str) -> int:
+    def _usage_int(self, usage: object, *names: str) -> int:
         for name in names:
             value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
             if value is not None:
                 return self._int(value, 0)
         return 0
 
-    def _exception_status_code(self, exception: Any) -> int | None:
+    def _exception_status_code(self, exception: object) -> int | None:
         if exception is None:
             return None
         for field_name in ("status_code", "http_status", "code"):
@@ -539,10 +538,10 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 return self._int(value, 0)
         return None
 
-    def _optional_str(self, value: Any) -> str | None:
+    def _optional_str(self, value: object) -> str | None:
         return None if value is None else str(value)
 
-    def _int(self, value: Any, default: int) -> int:
+    def _int(self, value: object, default: int) -> int:
         try:
             if value is None:
                 return default
@@ -550,7 +549,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         except (TypeError, ValueError):
             return default
 
-    def _float(self, value: Any, default: float) -> float:
+    def _float(self, value: object, default: float) -> float:
         try:
             if value is None:
                 return default
