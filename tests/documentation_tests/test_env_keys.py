@@ -27,7 +27,9 @@ EXCLUDED_GUARD_ONLY_VARS = {
 # Temporary/internal rollout flags are intentionally not added to the public
 # environment settings docs until the feature is ready for broad use.
 EXCLUDED_ROLLOUT_FLAGS = {
+    "CODE_PLAN_QUOTA_REDIS_URL",
     "LITELLM_USE_RUST_OCR",
+    "REDIS_URL",
 }
 
 EXCLUDED_TERMINAL_VARS = {
@@ -60,7 +62,8 @@ SKIP_DIRS = {
     "build",
 }
 
-# Walk through all files in the litellm repo to find references of os.getenv() and litellm.get_secret()
+# Walk through all files in the litellm repo to find references of os.getenv()
+# and litellm.get_secret()
 for root, dirs, files in os.walk(repo_base):
     # Skip dependency/venv directories - prevents picking up env vars from installed packages
     dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
