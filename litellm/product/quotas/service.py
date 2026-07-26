@@ -29,11 +29,9 @@ class QuotaUnavailableError(Exception):
 
 
 class QuotaStore(Protocol):
-    async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
-        ...
+    async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision: ...
 
-    async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision:
-        ...
+    async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision: ...
 
 
 def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> float:
