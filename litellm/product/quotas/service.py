@@ -145,8 +145,7 @@ class InMemoryQuotaStore:
 
         for window in request.windows:
             self.spent[(request.subscription_id, window.name)] = (
-                self.spent.get((request.subscription_id, window.name), 0.0)
-                + reserved_credits
+                self.spent.get((request.subscription_id, window.name), 0.0) + reserved_credits
             )
         balances_after = self._balances_before(
             request.subscription_id,
@@ -217,10 +216,7 @@ class InMemoryQuotaStore:
         subscription_id: str,
         windows: list[QuotaWindow],
     ) -> dict[str, float]:
-        return {
-            window.name: window.limit - self.spent.get((subscription_id, window.name), 0.0)
-            for window in windows
-        }
+        return {window.name: window.limit - self.spent.get((subscription_id, window.name), 0.0) for window in windows}
 
 
 class QuotaService:
