@@ -152,9 +152,8 @@ class InMemoryQuotaStore:
             request.subscription_id,
             request.windows,
         )
-        self.reservations[
-            (request.subscription_id, request.request_id)
-        ] = reserved_credits
+        reservation_key = (request.subscription_id, request.request_id)
+        self.reservations[reservation_key] = reserved_credits
         decision = QuotaDecision(
             allowed=True,
             request_id=request.request_id,
