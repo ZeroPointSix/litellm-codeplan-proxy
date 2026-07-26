@@ -1,12 +1,17 @@
+import os
+from uuid import uuid4
+
 import pytest
 
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
+    QuotaEventType,
     QuotaReserveRequest,
     QuotaSettlementRequest,
     QuotaWindow,
 )
+from litellm.product.quotas.redis_store import RedisQuotaStore
 from litellm.product.quotas.service import (
     InMemoryQuotaStore,
     QuotaExceededError,
@@ -16,6 +21,10 @@ from litellm.product.quotas.service import (
     quota_windows_from_metadata,
     settlement_usage_for_failure,
 )
+from litellm.proxy.hooks.code_plan_quota import (
+    CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY,
+    _PROXY_CodePlanQuotaHandler,
+)
 
 
 def _windows(limit_5h: float = 100, limit_week: float = 500, limit_month: float = 1000):
@@ -24,6 +33,28 @@ def _windows(limit_5h: float = 100, limit_week: float = 500, limit_month: float 
         QuotaWindow(name="week", limit=limit_week, ttl_seconds=604_800),
         QuotaWindow(name="month", limit=limit_month, ttl_seconds=2_592_000),
     ]
+
+
+class _UserKey:
+    def __init__(self, metadata):
+        self.metadata = metadata
+        self.parent_otel_span = None
+
+
+def _code_plan_metadata(**overrides):
+    metadata = {
+        "code_plan_subscription_id": "sub-1",
+        "code_plan_project_id": "project-1",
+        "code_plan_quota_5h": 100,
+        "code_plan_quota_weekly": 500,
+        "code_plan_default_max_output_tokens": 100,
+        "code_plan_credit_input_multiplier": 1,
+        "code_plan_credit_output_multiplier": 1,
+        "code_plan_credit_cache_read_multiplier": 0,
+        "code_plan_credit_cache_write_multiplier": 0,
+    }
+    metadata.update(overrides)
+    return metadata
 
 
 def test_calculate_credits_uses_all_four_multipliers():
@@ -147,6 +178,110 @@ async def test_settle_is_idempotent_by_request_and_event_type():
 
 
 @pytest.mark.asyncio
+async def test_rejected_reserve_is_not_cached_and_can_succeed_after_recovery():
+    store = InMemoryQuotaStore()
+    service = QuotaService(store)
+    windows = _windows(limit_5h=1, limit_week=1, limit_month=1)
+    first = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-prime-overdraft",
+            subscription_id="sub-1",
+            input_usage=CreditUsage(input_tokens=2),
+            multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+            windows=windows,
+            default_max_output_tokens=0,
+        )
+    )
+    retry_request = QuotaReserveRequest(
+        request_id="req-retry-after-reject",
+        subscription_id="sub-1",
+        input_usage=CreditUsage(input_tokens=1),
+        multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+        windows=windows,
+        default_max_output_tokens=0,
+    )
+
+    with pytest.raises(QuotaExceededError):
+        await service.reserve(retry_request)
+
+    await service.settle(
+        QuotaSettlementRequest(
+            request_id="req-prime-overdraft",
+            subscription_id="sub-1",
+            actual_usage=CreditUsage(),
+            multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+            windows=windows,
+            reserved_credits=first.credits,
+            event_type=QuotaEventType.RELEASE,
+        )
+    )
+    retried = await service.reserve(retry_request)
+
+    assert retried.allowed is True
+    assert retried.idempotent is False
+    assert store.spent[("sub-1", "5h")] == 1
+
+
+@pytest.mark.asyncio
+async def test_redis_rejected_reserve_is_not_cached_and_can_succeed_after_recovery():
+    if os.getenv("CODE_PLAN_REDIS_INTEGRATION") != "true":
+        pytest.skip("Redis integration test disabled")
+    redis_url = os.getenv("CODE_PLAN_QUOTA_REDIS_URL")
+    if not redis_url:
+        pytest.skip("CODE_PLAN_QUOTA_REDIS_URL is not configured")
+
+    redis_asyncio = pytest.importorskip("redis.asyncio")
+    redis_client = redis_asyncio.from_url(redis_url, decode_responses=True)
+    key_prefix = f"codeplan:test:{uuid4()}"
+    service = QuotaService(RedisQuotaStore(redis_client, key_prefix=key_prefix, event_ttl_seconds=60))
+    windows = _windows(limit_5h=1, limit_week=1, limit_month=1)
+    try:
+        first = await service.reserve(
+            QuotaReserveRequest(
+                request_id="req-prime-overdraft",
+                subscription_id="sub-redis",
+                input_usage=CreditUsage(input_tokens=2),
+                multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+                windows=windows,
+                default_max_output_tokens=0,
+            )
+        )
+        retry_request = QuotaReserveRequest(
+            request_id="req-retry-after-reject",
+            subscription_id="sub-redis",
+            input_usage=CreditUsage(input_tokens=1),
+            multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+            windows=windows,
+            default_max_output_tokens=0,
+        )
+
+        with pytest.raises(QuotaExceededError):
+            await service.reserve(retry_request)
+
+        await service.settle(
+            QuotaSettlementRequest(
+                request_id="req-prime-overdraft",
+                subscription_id="sub-redis",
+                actual_usage=CreditUsage(),
+                multipliers=CreditMultipliers(input_multiplier=1, output_multiplier=0),
+                windows=windows,
+                reserved_credits=first.credits,
+                event_type=QuotaEventType.RELEASE,
+            )
+        )
+        retried = await service.reserve(retry_request)
+
+        assert retried.allowed is True
+        assert retried.idempotent is False
+    finally:
+        keys = await redis_client.keys(f"{key_prefix}:*")
+        if keys:
+            await redis_client.delete(*keys)
+        close = getattr(redis_client, "aclose", redis_client.close)
+        await close()
+
+
+@pytest.mark.asyncio
 async def test_quota_allows_one_overdraft_only_when_balance_started_positive():
     service = QuotaService(InMemoryQuotaStore())
     windows = _windows(limit_5h=10, limit_week=10, limit_month=10)
@@ -236,6 +371,89 @@ async def test_upstream_5xx_charges_input_only():
     assert reserve.credits == 110
     assert settled.credits == 10
     assert settled.balances_after["5h"] == 90
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_streaming_success_settles_and_post_call_does_not_double_settle(monkeypatch):
+    store = InMemoryQuotaStore()
+    handler = _PROXY_CodePlanQuotaHandler(QuotaService(store))
+    user_api_key = _UserKey(metadata=_code_plan_metadata())
+    data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hello"}],
+        "metadata": {"request_id": "req-stream-success"},
+    }
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
+
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=data,
+        call_type="acompletion",
+    )
+    assert store.spent[("sub-1", "5h")] == 110
+
+    await handler.async_log_success_event(
+        kwargs={
+            "litellm_params": {"metadata": data["metadata"]},
+            "standard_logging_object": {"metadata": data["metadata"]},
+        },
+        response_obj={"usage": {"prompt_tokens": 10, "completion_tokens": 5}},
+        start_time=None,
+        end_time=None,
+    )
+    await handler.async_post_call_success_hook(
+        data=data,
+        user_api_key_dict=user_api_key,
+        response={"usage": {"prompt_tokens": 10, "completion_tokens": 50}},
+    )
+
+    assert store.spent[("sub-1", "5h")] == 15
+    assert store.events[("sub-1", "req-stream-success", QuotaEventType.SETTLE)].credits == 15
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_disconnect_releases_reserved_credits(monkeypatch):
+    store = InMemoryQuotaStore()
+    handler = _PROXY_CodePlanQuotaHandler(QuotaService(store))
+    user_api_key = _UserKey(metadata=_code_plan_metadata())
+    data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hello"}],
+        "metadata": {"request_id": "req-stream-disconnect"},
+    }
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
+
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=data,
+        call_type="acompletion",
+    )
+    assert CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY in user_api_key.metadata
+
+    await handler.async_release_max_parallel_requests_on_disconnect(user_api_key)
+
+    assert store.spent[("sub-1", "5h")] == 0
+    assert store.events[("sub-1", "req-stream-disconnect", QuotaEventType.RELEASE)].credits == 0
+
+
+def test_quota_hook_token_counter_failure_uses_text_fallback(monkeypatch):
+    handler = _PROXY_CodePlanQuotaHandler(QuotaService(InMemoryQuotaStore()))
+
+    def _raise_token_counter(**kwargs):
+        raise RuntimeError("unknown model")
+
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", _raise_token_counter)
+
+    estimate = handler._estimate_input_tokens(
+        {
+            "model": "unknown-model",
+            "messages": [{"role": "user", "content": "x" * 20}],
+        }
+    )
+
+    assert estimate > 0
 
 
 @pytest.mark.asyncio

@@ -103,7 +103,6 @@ class InMemoryQuotaStore:
                 balances_after=balances_before,
                 reason="Code Plan quota exhausted",
             )
-            self.events[event_key] = decision
             return decision
 
         for window in request.windows:

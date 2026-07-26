@@ -57,9 +57,7 @@ if not allowed then
     reason = "Code Plan quota exhausted",
     metadata = {}
   }
-  local encoded = cjson.encode(decision)
-  redis.call("SET", KEYS[1], encoded, "EX", event_ttl)
-  return encoded
+  return cjson.encode(decision)
 end
 
 for i = 1, n do
