@@ -217,11 +217,7 @@ class InMemoryQuotaStore:
         subscription_id: str,
         windows: list[QuotaWindow],
     ) -> dict[str, float]:
-        return {
-            window.name: window.limit
-            - self.spent.get((subscription_id, window.name), 0.0)
-            for window in windows
-        }
+        return {window.name: window.limit - self.spent.get((subscription_id, window.name), 0.0) for window in windows}
 
 
 class QuotaService:
