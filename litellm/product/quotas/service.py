@@ -30,11 +30,15 @@ class QuotaUnavailableError(Exception):
 
 class QuotaStore(Protocol):
     async def reserve(
-        self, request: QuotaReserveRequest, reserved_credits: float
+        self,
+        request: QuotaReserveRequest,
+        reserved_credits: float,
     ) -> QuotaDecision: ...
 
     async def settle(
-        self, request: QuotaSettlementRequest, settled_credits: float
+        self,
+        request: QuotaSettlementRequest,
+        settled_credits: float,
     ) -> QuotaDecision: ...
 
 
@@ -48,7 +52,8 @@ def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> flo
 
 
 def reserve_usage(
-    input_usage: CreditUsage, default_max_output_tokens: int
+    input_usage: CreditUsage,
+    default_max_output_tokens: int,
 ) -> CreditUsage:
     return CreditUsage(
         input_tokens=input_usage.input_tokens,
@@ -91,7 +96,9 @@ def quota_windows_from_metadata(metadata: Mapping[str, object]) -> list[QuotaWin
     if monthly_limit is not None:
         windows.append(
             QuotaWindow(
-                name="month", limit=float(monthly_limit), ttl_seconds=MONTH_SECONDS
+                name="month",
+                limit=float(monthly_limit),
+                ttl_seconds=MONTH_SECONDS,
             )
         )
     return windows
@@ -104,7 +111,9 @@ class InMemoryQuotaStore:
         self.reservations: dict[tuple[str, str], float] = {}
 
     async def reserve(
-        self, request: QuotaReserveRequest, reserved_credits: float
+        self,
+        request: QuotaReserveRequest,
+        reserved_credits: float,
     ) -> QuotaDecision:
         event_key = (
             request.subscription_id,
@@ -115,7 +124,8 @@ class InMemoryQuotaStore:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
         balances_before = self._balances_before(
-            request.subscription_id, request.windows
+            request.subscription_id,
+            request.windows,
         )
         if any(balance <= 0 for balance in balances_before.values()):
             decision = QuotaDecision(
@@ -137,7 +147,8 @@ class InMemoryQuotaStore:
                 + reserved_credits
             )
         balances_after = self._balances_before(
-            request.subscription_id, request.windows
+            request.subscription_id,
+            request.windows,
         )
         self.reservations[
             (request.subscription_id, request.request_id)
@@ -156,18 +167,26 @@ class InMemoryQuotaStore:
         return decision
 
     async def settle(
-        self, request: QuotaSettlementRequest, settled_credits: float
+        self,
+        request: QuotaSettlementRequest,
+        settled_credits: float,
     ) -> QuotaDecision:
-        event_key = (request.subscription_id, request.request_id, request.event_type)
+        event_key = (
+            request.subscription_id,
+            request.request_id,
+            request.event_type,
+        )
         if event_key in self.events:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
         reservation_key = (request.subscription_id, request.request_id)
         reserved_credits = self.reservations.get(
-            reservation_key, request.reserved_credits
+            reservation_key,
+            request.reserved_credits,
         )
         balances_before = self._balances_before(
-            request.subscription_id, request.windows
+            request.subscription_id,
+            request.windows,
         )
         delta = settled_credits - reserved_credits
         for window in request.windows:
@@ -175,7 +194,8 @@ class InMemoryQuotaStore:
                 self.spent.get((request.subscription_id, window.name), 0.0) + delta
             )
         balances_after = self._balances_before(
-            request.subscription_id, request.windows
+            request.subscription_id,
+            request.windows,
         )
         self.reservations.pop(reservation_key, None)
         decision = QuotaDecision(
@@ -192,7 +212,9 @@ class InMemoryQuotaStore:
         return decision
 
     def _balances_before(
-        self, subscription_id: str, windows: list[QuotaWindow]
+        self,
+        subscription_id: str,
+        windows: list[QuotaWindow],
     ) -> dict[str, float]:
         return {
             window.name: window.limit
