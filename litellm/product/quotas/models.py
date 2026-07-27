@@ -82,6 +82,7 @@ class QuotaSettlementRequest(BaseModel):
     windows: list[QuotaWindow] = Field(min_length=1)
     reserved_credits: float = Field(ge=0)
     event_type: QuotaEventType = QuotaEventType.SETTLE
+    anchor_first_success: bool = True
 
     model_config = ConfigDict(extra="forbid")
 
