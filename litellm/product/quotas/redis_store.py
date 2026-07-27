@@ -95,13 +95,14 @@ if event_value then
   return cjson.encode(decision)
 end
 
-if not redis.call("GET", KEYS[2]) then
+local reservation_raw = redis.call("GET", KEYS[2])
+if not reservation_raw then
   local missing = {
     allowed = false,
-    request_id = ARGV[4],
-    subscription_id = ARGV[5],
-    project_id = ARGV[6],
-    event_type = ARGV[7],
+    request_id = ARGV[3],
+    subscription_id = ARGV[4],
+    project_id = ARGV[5],
+    event_type = ARGV[6],
     credits = tonumber(ARGV[1]),
     balances_before = {},
     balances_after = {},
@@ -112,16 +113,17 @@ if not redis.call("GET", KEYS[2]) then
   return cjson.encode(missing)
 end
 
+local reservation = cjson.decode(reservation_raw)
 local credits = tonumber(ARGV[1])
-local reserved = tonumber(ARGV[2])
-local event_ttl = tonumber(ARGV[3])
-local request_id = ARGV[4]
-local subscription_id = ARGV[5]
-local project_id = ARGV[6]
-local event_type = ARGV[7]
-local window_names = cjson.decode(ARGV[8])
-local n = tonumber(ARGV[9])
-local limits_index = 10
+local reserved = tonumber(reservation["reserved_credits"])
+local event_ttl = tonumber(ARGV[2])
+local request_id = ARGV[3]
+local subscription_id = ARGV[4]
+local project_id = ARGV[5]
+local event_type = ARGV[6]
+local window_names = cjson.decode(ARGV[7])
+local n = tonumber(ARGV[8])
+local limits_index = 9
 local ttls_index = limits_index + n
 local delta = credits - reserved
 local balances_before = {}
@@ -181,6 +183,11 @@ class RedisQuotaStore:
         payload = await self.redis_client.eval(SETTLE_LUA, len(keys), *keys, *args)
         return self._decision(payload)
 
+    def _ttl_for_windows(self, windows: list) -> int:
+        if not windows:
+            return self.event_ttl_seconds
+        return max(self.event_ttl_seconds, max(window.ttl_seconds for window in windows))
+
     def _keys(self, subscription_id: str, request_id: str, event_type: QuotaEventType, windows: list) -> list[str]:
         return [
             f"{self.key_prefix}:event:{subscription_id}:{request_id}:{event_type.value}",
@@ -200,7 +207,7 @@ class RedisQuotaStore:
         )
         return [
             str(reserved_credits),
-            str(self.event_ttl_seconds),
+            str(self._ttl_for_windows(request.windows)),
             reservation_payload,
             request.request_id,
             request.subscription_id,
@@ -214,8 +221,7 @@ class RedisQuotaStore:
     def _settle_args(self, request: QuotaSettlementRequest, settled_credits: float) -> list[str]:
         return [
             str(settled_credits),
-            str(request.reserved_credits),
-            str(self.event_ttl_seconds),
+            str(self._ttl_for_windows(request.windows)),
             request.request_id,
             request.subscription_id,
             request.project_id or "",

@@ -548,3 +548,43 @@ async def test_proxy_client_generates_gateway_limited_key(monkeypatch):
     assert request.metadata["code_plan_credit_cache_write_multiplier"] == 0.0
     assert request.metadata["code_plan_native_budget_disabled"] is True
     assert request.metadata["source"] == "unit-test"
+
+
+@pytest.mark.asyncio
+async def test_proxy_client_rejects_user_metadata_overriding_code_plan_fields(monkeypatch):
+    from litellm.proxy.management_endpoints import key_management_endpoints
+
+    captured: dict[str, Any] = {}
+
+    async def fake_generate_key_fn(data, user_api_key_dict, litellm_changed_by):
+        captured["request"] = data
+        return {"token_id": "key-live-1", "key": "sk-live-1"}
+
+    monkeypatch.setattr(key_management_endpoints, "generate_key_fn", fake_generate_key_fn)
+    subscription = SubscriptionRecord(
+        subscription_id="sub-1",
+        project_id="project-1",
+        plan_id="plan-basic",
+        status=SubscriptionStatus.ACTIVE,
+        plan_snapshot=plan_snapshot_from_plan(_plan()),
+        litellm_team_id="team-1",
+        litellm_key_ids=[],
+        version=1,
+    )
+
+    await ProxySubscriptionLiteLLMClient().generate_key(
+        "team-1",
+        subscription,
+        metadata={
+            "source": "unit-test",
+            "code_plan_quota_5h": 1,
+            "code_plan_subscription_id": "evil-sub",
+            "code_plan_native_budget_disabled": False,
+        },
+    )
+
+    metadata = captured["request"].metadata
+    assert metadata["source"] == "unit-test"
+    assert metadata["code_plan_quota_5h"] == 100
+    assert metadata["code_plan_subscription_id"] == "sub-1"
+    assert metadata["code_plan_native_budget_disabled"] is True

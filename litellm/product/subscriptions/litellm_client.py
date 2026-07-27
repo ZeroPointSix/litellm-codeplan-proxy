@@ -19,6 +19,23 @@ CODE_PLAN_GATEWAY_ALLOWED_ROUTES = [
     "/v1/models",
 ]
 
+_CODE_PLAN_METADATA_PREFIX = "code_plan_"
+
+
+def merge_code_plan_key_metadata(
+    system_metadata: dict[str, Any],
+    user_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge caller metadata without letting it override Code Plan system fields."""
+    sanitized_user = {
+        key: value
+        for key, value in (user_metadata or {}).items()
+        if not str(key).startswith(_CODE_PLAN_METADATA_PREFIX)
+    }
+    merged = dict(sanitized_user)
+    merged.update(system_metadata)
+    return merged
+
 
 class SubscriptionLiteLLMClient(Protocol):
     async def create_team(self, config: dict[str, Any], actor: UserAPIKeyAuth | None = None) -> str: ...
@@ -92,7 +109,7 @@ class ProxySubscriptionLiteLLMClient:
     ) -> LiteLLMKeyProvision:
         from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn
 
-        key_metadata = {
+        system_metadata = {
             "code_plan_subscription_id": subscription.subscription_id,
             "code_plan_project_id": subscription.project_id,
             "code_plan_id": subscription.plan_id,
@@ -110,8 +127,8 @@ class ProxySubscriptionLiteLLMClient:
         }
         quota_monthly = subscription.plan_snapshot.metadata.get("quota_monthly")
         if quota_monthly is not None:
-            key_metadata["code_plan_quota_monthly"] = quota_monthly
-        key_metadata.update(metadata or {})
+            system_metadata["code_plan_quota_monthly"] = quota_monthly
+        key_metadata = merge_code_plan_key_metadata(system_metadata, metadata)
         request = GenerateKeyRequest(
             team_id=team_id,
             models=list(subscription.plan_snapshot.allowed_models),

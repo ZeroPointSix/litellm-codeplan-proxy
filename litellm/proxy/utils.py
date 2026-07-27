@@ -2583,7 +2583,11 @@ class ProxyLogging:
             logging_obj._deferred_stream_complete_args = None
             asyncio.create_task(_deferred_cb(*_args))
 
-    def _release_max_parallel_requests_on_disconnect(self, user_api_key_dict: UserAPIKeyAuth) -> None:
+    def _release_max_parallel_requests_on_disconnect(
+        self,
+        user_api_key_dict: UserAPIKeyAuth,
+        request_data: dict | None = None,
+    ) -> None:
         """
         Release the api-key max_parallel_requests slot when a streaming
         response is cancelled mid-flight (client disconnect). Neither the
@@ -2611,8 +2615,11 @@ class ProxyLogging:
         if quota_hook is not None:
             release_quota = getattr(quota_hook, "async_release_max_parallel_requests_on_disconnect", None)
             if callable(release_quota):
+                async def _release_code_plan_quota(_user_api_key_dict: UserAPIKeyAuth) -> None:
+                    await release_quota(_user_api_key_dict, request_data)
+
                 self._schedule_disconnect_cleanup(
-                    release_quota,
+                    _release_code_plan_quota,
                     user_api_key_dict,
                     hook_name="code_plan_quota",
                 )
