@@ -207,7 +207,9 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
         input_usage = CreditUsage.model_validate(reservation["input_usage"])
         recovered_usage = self._recovered_failure_usage(kwargs)
-        original_exception = kwargs.get("exception") if isinstance(kwargs, dict) else None
+        original_exception = (
+            kwargs.get("exception") if isinstance(kwargs, dict) else None
+        )
         status_code = self._exception_status_code(original_exception)
         actual_usage = (
             recovered_usage
@@ -342,7 +344,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
         if not decision.allowed:
             verbose_proxy_logger.warning(
-                "Code Plan quota settlement was not applied during %s: request_id=%s reason=%s",
+                "Code Plan quota settlement was not applied during %s: "
+                "request_id=%s reason=%s",
                 context,
                 decision.request_id,
                 decision.reason,
