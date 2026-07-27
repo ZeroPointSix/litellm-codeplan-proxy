@@ -117,6 +117,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             actual_usage=self._usage_from_response(response),
             event_type=QuotaEventType.SETTLE,
             context="post-call success",
+            anchor_first_success=True,
         )
         return response
 
@@ -146,6 +147,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             actual_usage=actual_usage,
             event_type=QuotaEventType.RELEASE if actual_usage == CreditUsage() else QuotaEventType.SETTLE,
             context="post-call failure",
+            anchor_first_success=False,
         )
         return None
 
@@ -159,6 +161,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             actual_usage=self._usage_from_response(response_obj),
             event_type=QuotaEventType.SETTLE,
             context="async success logging",
+            anchor_first_success=True,
         )
 
     async def async_log_failure_event(self, kwargs, response_obj, start_time, end_time):
@@ -187,6 +190,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             actual_usage=actual_usage,
             event_type=QuotaEventType.RELEASE if actual_usage == CreditUsage() else QuotaEventType.SETTLE,
             context="async failure logging",
+            anchor_first_success=False,
         )
 
     async def async_release_max_parallel_requests_on_disconnect(
@@ -216,6 +220,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             actual_usage=actual_usage,
             event_type=event_type,
             context="stream disconnect",
+            anchor_first_success=False,
         )
 
     def _service(self) -> QuotaService:
@@ -241,6 +246,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         actual_usage: CreditUsage,
         event_type: QuotaEventType,
         context: str,
+        anchor_first_success: bool = True,
     ) -> None:
         if reservation is None or self._is_reservation_settled(data, reservation):
             return
@@ -251,6 +257,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 reservation=reservation,
                 actual_usage=actual_usage,
                 event_type=event_type,
+                anchor_first_success=anchor_first_success,
             )
             decision = await self._service().settle(settlement)
         except QuotaUnavailableError as exc:
@@ -280,6 +287,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         reservation: dict[str, object],
         actual_usage: CreditUsage,
         event_type: QuotaEventType,
+        anchor_first_success: bool = True,
     ) -> QuotaSettlementRequest:
         return QuotaSettlementRequest(
             request_id=str(reservation["request_id"]),
@@ -290,6 +298,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             windows=self._reservation_windows(reservation, metadata),
             reserved_credits=float(reservation["reserved_credits"]),
             event_type=event_type,
+            anchor_first_success=anchor_first_success,
         )
 
     def _has_required_quota_metadata(self, metadata: dict[str, object]) -> bool:
