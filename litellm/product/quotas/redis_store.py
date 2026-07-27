@@ -289,7 +289,9 @@ class RedisQuotaStore:
                     QuotaSettlementRequest(
                         request_id=str(reservation["request_id"]),
                         subscription_id=str(reservation["subscription_id"]),
-                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        project_id=reservation.get("project_id")
+                        if isinstance(reservation.get("project_id"), str)
+                        else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
@@ -316,7 +318,9 @@ class RedisQuotaStore:
                     QuotaSettlementRequest(
                         request_id=str(reservation["request_id"]),
                         subscription_id=str(reservation["subscription_id"]),
-                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        project_id=reservation.get("project_id")
+                        if isinstance(reservation.get("project_id"), str)
+                        else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
@@ -339,7 +343,11 @@ class RedisQuotaStore:
         await self.redis_client.set(key, str(int(five.anchor_epoch)), nx=True, exat=int(week.period_end_epoch))
 
     async def _iter_reservations(self, subscription_id: str | None = None):
-        pattern = f"{self.key_prefix}:reservation:{subscription_id}:*" if subscription_id else f"{self.key_prefix}:reservation:*"
+        pattern = (
+            f"{self.key_prefix}:reservation:{subscription_id}:*"
+            if subscription_id
+            else f"{self.key_prefix}:reservation:*"
+        )
         scan_iter = getattr(self.redis_client, "scan_iter", None)
         if scan_iter is not None:
             async for key in scan_iter(match=pattern):
