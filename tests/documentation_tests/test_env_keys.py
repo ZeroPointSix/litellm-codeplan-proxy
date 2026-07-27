@@ -28,6 +28,7 @@ EXCLUDED_GUARD_ONLY_VARS = {
 # environment settings docs until the feature is ready for broad use.
 EXCLUDED_ROLLOUT_FLAGS = {
     "CODE_PLAN_QUOTA_REDIS_URL",
+    "CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS",
     "LITELLM_USE_RUST_OCR",
     "REDIS_URL",
 }
