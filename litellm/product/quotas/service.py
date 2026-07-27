@@ -439,7 +439,9 @@ class InMemoryQuotaStore:
                     QuotaSettlementRequest(
                         request_id=str(request_id),
                         subscription_id=str(sub_id),
-                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        project_id=reservation.get("project_id")
+                        if isinstance(reservation.get("project_id"), str)
+                        else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
@@ -466,7 +468,9 @@ class InMemoryQuotaStore:
                     QuotaSettlementRequest(
                         request_id=str(request_id),
                         subscription_id=str(sub_id),
-                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        project_id=reservation.get("project_id")
+                        if isinstance(reservation.get("project_id"), str)
+                        else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
