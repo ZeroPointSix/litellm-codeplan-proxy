@@ -129,17 +129,7 @@ class ProxySubscriptionLiteLLMClient:
             "code_plan_subscription_started_at": self._iso_or_none(subscription.created_at),
             "code_plan_renewed_at": self._iso_or_none(subscription.renewed_at),
         }
-        # Preserve an already-opened 5h fixed window across key re-issue.
-        existing_5h_anchor = (metadata or {}).get("code_plan_5h_anchor_epoch")
-        if existing_5h_anchor is None and isinstance(subscription.metadata, dict):
-            existing_5h_anchor = subscription.metadata.get("code_plan_5h_anchor_epoch")
-        if existing_5h_anchor is not None:
-            system_metadata["code_plan_5h_anchor_epoch"] = existing_5h_anchor
-            period_id = (metadata or {}).get("code_plan_5h_period_id")
-            if period_id is None and isinstance(subscription.metadata, dict):
-                period_id = subscription.metadata.get("code_plan_5h_period_id")
-            if period_id is not None:
-                system_metadata["code_plan_5h_period_id"] = period_id
+        system_metadata.update(self._preserved_5h_anchor_metadata(subscription))
         quota_monthly = subscription.plan_snapshot.metadata.get("quota_monthly")
         if quota_monthly is not None:
             system_metadata["code_plan_quota_monthly"] = quota_monthly
@@ -175,6 +165,19 @@ class ProxySubscriptionLiteLLMClient:
             user_api_key_dict=self._actor_or_admin(actor),
             litellm_changed_by=self._changed_by(actor),
         )
+
+    def _preserved_5h_anchor_metadata(self, subscription: SubscriptionRecord) -> dict[str, Any]:
+        """Preserve only system-recorded anchors; ignore caller-supplied key metadata."""
+        if not isinstance(subscription.metadata, dict):
+            return {}
+        existing_5h_anchor = subscription.metadata.get("code_plan_5h_anchor_epoch")
+        if existing_5h_anchor is None:
+            return {}
+        preserved: dict[str, Any] = {"code_plan_5h_anchor_epoch": existing_5h_anchor}
+        period_id = subscription.metadata.get("code_plan_5h_period_id")
+        if period_id is not None:
+            preserved["code_plan_5h_period_id"] = period_id
+        return preserved
 
     def _extract_field(self, response: Any, field: str) -> str:
         value = self._extract_optional_field(response, field)
