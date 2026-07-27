@@ -594,7 +594,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                         text=str(data.get("input")),
                     )
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001  # litellm.token_counter raises provider-specific errors
             estimate = self._fallback_input_token_estimate(data)
             verbose_proxy_logger.debug(
                 "Code Plan quota token estimation used fallback estimate=%s error=%s",
