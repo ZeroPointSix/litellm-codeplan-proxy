@@ -208,7 +208,9 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         input_usage = CreditUsage.model_validate(reservation["input_usage"])
         recovered_usage = self._recovered_failure_usage(kwargs)
         original_exception = (
-            kwargs.get("exception") if isinstance(kwargs, dict) else None
+            kwargs.get("exception")
+            if isinstance(kwargs, dict)
+            else None
         )
         status_code = self._exception_status_code(original_exception)
         actual_usage = (
