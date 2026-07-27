@@ -745,7 +745,11 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
     def _usage_int(self, usage: object, *names: str) -> int:
         for name in names:
-            value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
+            value = (
+                usage.get(name)
+                if isinstance(usage, dict)
+                else getattr(usage, name, None)
+            )
             if value is not None:
                 return self._int(value, 0)
         return 0
