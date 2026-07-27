@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -32,12 +33,27 @@ from litellm.types.utils import CallTypesLiteral
 CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY = "code_plan_quota_reservation"
 CODE_PLAN_QUOTA_SETTLED_METADATA_KEY = "_code_plan_quota_settled"
 CODE_PLAN_REQUEST_ID_METADATA_KEY = "code_plan_request_id"
+CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS = 60
+CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS = frozenset(
+    {"code_plan_5h_anchor_epoch", "code_plan_5h_period_id"}
+)
 DEFAULT_CHARS_PER_TOKEN = 4
 
 
 class _PROXY_CodePlanQuotaHandler(CustomLogger):
-    def __init__(self, quota_service: QuotaService | None = None):
+    def __init__(
+        self,
+        quota_service: QuotaService | None = None,
+        *,
+        pending_compensation_interval_seconds: int | None = None,
+    ):
         self._quota_service = quota_service
+        self._pending_compensation_interval_seconds = (
+            pending_compensation_interval_seconds
+            if pending_compensation_interval_seconds is not None
+            else self._pending_compensation_interval_from_env()
+        )
+        self._last_pending_compensation_sweep_monotonic = 0.0
 
     async def async_pre_call_hook(
         self,
@@ -55,6 +71,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 detail={"error": "Code Plan quota metadata incomplete"},
             )
 
+        await self._sweep_expired_pending_usage_if_due()
+
         request_metadata = data.get("metadata")
         if not isinstance(request_metadata, dict):
             request_metadata = {}
@@ -62,7 +80,8 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         request_id = self._request_id(request_metadata)
         input_usage = self._input_usage_from_data(data)
         multipliers = self._multipliers(metadata)
-        windows = quota_windows_from_metadata(metadata)
+        quota_metadata = self._quota_window_metadata(metadata)
+        windows = quota_windows_from_metadata(quota_metadata)
         reserve_request = QuotaReserveRequest(
             request_id=request_id,
             subscription_id=str(metadata["code_plan_subscription_id"]),
@@ -237,6 +256,36 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         self._quota_service = QuotaService(RedisQuotaStore(redis_client))
         return self._quota_service
 
+    async def _sweep_expired_pending_usage_if_due(self) -> None:
+        if self._pending_compensation_interval_seconds <= 0:
+            return
+        now = time.monotonic()
+        if (
+            now - self._last_pending_compensation_sweep_monotonic
+            < self._pending_compensation_interval_seconds
+        ):
+            return
+        self._last_pending_compensation_sweep_monotonic = now
+        try:
+            decisions = await self._service().compensate_expired_pending_usage()
+        except QuotaUnavailableError as exc:
+            verbose_proxy_logger.exception(f"Code Plan pending quota compensation sweep failed: {exc}")
+            return
+        if decisions:
+            verbose_proxy_logger.info(
+                "Code Plan pending quota compensation sweep applied %s decisions",
+                len(decisions),
+            )
+
+    def _pending_compensation_interval_from_env(self) -> int:
+        return max(
+            0,
+            self._int(
+                os.getenv("CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS"),
+                CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS,
+            ),
+        )
+
     async def _settle_reserved_usage(
         self,
         *,
@@ -326,11 +375,18 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         windows = reservation.get("windows")
         if isinstance(windows, list) and windows:
             return [QuotaWindow.model_validate(window) for window in windows]
-        return quota_windows_from_metadata(metadata)
+        return quota_windows_from_metadata(self._quota_window_metadata(metadata))
 
     def _key_metadata(self, user_api_key_dict: object) -> dict[str, object]:
         metadata = getattr(user_api_key_dict, "metadata", None)
         return metadata if isinstance(metadata, dict) else {}
+
+    def _quota_window_metadata(self, metadata: dict[str, object]) -> dict[str, object]:
+        return {
+            key: value
+            for key, value in metadata.items()
+            if key not in CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS
+        }
 
     @staticmethod
     def _stash_value_in_metadata_channels(data: dict[str, object], key: str, value: object) -> None:
@@ -590,9 +646,6 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             period_id = window.get("period_id")
             if anchor is None:
                 continue
-            metadata["code_plan_5h_anchor_epoch"] = anchor
-            if period_id is not None:
-                metadata["code_plan_5h_period_id"] = period_id
             if isinstance(data, dict):
                 self._stash_value_in_metadata_channels(data, "code_plan_5h_anchor_epoch", anchor)
                 if period_id is not None:
