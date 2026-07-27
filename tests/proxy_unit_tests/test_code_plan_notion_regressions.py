@@ -159,7 +159,7 @@ async def test_quota_hook_pre_call_sweeps_expired_pending_usage(monkeypatch):
     reserved = _spent(store, "sub-1", "5h")
     await handler.async_release_max_parallel_requests_on_disconnect(user_api_key, pending_data)
     store.reservations[("sub-1", "req-pending-runtime")]["pending_since_epoch"] = 0
-    handler._last_pending_compensation_sweep_monotonic = 0
+    handler._last_pending_compensation_sweep_monotonic = -10_000
 
     next_data = {
         "model": "test-model",
