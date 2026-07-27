@@ -2615,6 +2615,7 @@ class ProxyLogging:
         if quota_hook is not None:
             release_quota = getattr(quota_hook, "async_release_max_parallel_requests_on_disconnect", None)
             if callable(release_quota):
+
                 async def _release_code_plan_quota(_user_api_key_dict: UserAPIKeyAuth) -> None:
                     await release_quota(_user_api_key_dict, request_data)
 
