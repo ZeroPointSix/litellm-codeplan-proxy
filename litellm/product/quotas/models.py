@@ -9,6 +9,18 @@ class QuotaEventType(str, Enum):
     RESERVE = "reserve"
     SETTLE = "settle"
     RELEASE = "release"
+    PENDING_USAGE = "pending_usage"
+    EXPIRED = "expired"
+    COMPENSATED = "compensated"
+
+
+class ReservationState(str, Enum):
+    RESERVED = "RESERVED"
+    SETTLED = "SETTLED"
+    RELEASED = "RELEASED"
+    PENDING_USAGE = "PENDING_USAGE"
+    EXPIRED = "EXPIRED"
+    COMPENSATED = "COMPENSATED"
 
 
 class CreditUsage(BaseModel):
@@ -33,15 +45,19 @@ class QuotaWindow(BaseModel):
     name: str = Field(min_length=1)
     limit: float = Field(gt=0)
     ttl_seconds: int = Field(gt=0)
+    period_id: str = Field(min_length=1)
+    period_end_epoch: int = Field(gt=0)
+    anchor_epoch: int | None = None
+    starts_on_first_success: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("name")
+    @field_validator("name", "period_id")
     @classmethod
-    def clean_name(cls, value: str) -> str:
+    def clean_required_string(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("quota window name is required")
+            raise ValueError("value is required")
         return normalized
 
 

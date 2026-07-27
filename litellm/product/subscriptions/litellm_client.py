@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from litellm.product.subscriptions.models import LiteLLMKeyProvision, SubscriptionRecord
@@ -124,7 +125,21 @@ class ProxySubscriptionLiteLLMClient:
             "code_plan_credit_cache_read_multiplier": subscription.plan_snapshot.credit_cache_read_multiplier,
             "code_plan_credit_cache_write_multiplier": subscription.plan_snapshot.credit_cache_write_multiplier,
             "code_plan_native_budget_disabled": True,
+            "code_plan_week_anchor_epoch": self._week_anchor_epoch(subscription),
+            "code_plan_subscription_started_at": self._iso_or_none(subscription.created_at),
+            "code_plan_renewed_at": self._iso_or_none(subscription.renewed_at),
         }
+        # Preserve an already-opened 5h fixed window across key re-issue.
+        existing_5h_anchor = (metadata or {}).get("code_plan_5h_anchor_epoch")
+        if existing_5h_anchor is None and isinstance(subscription.metadata, dict):
+            existing_5h_anchor = subscription.metadata.get("code_plan_5h_anchor_epoch")
+        if existing_5h_anchor is not None:
+            system_metadata["code_plan_5h_anchor_epoch"] = existing_5h_anchor
+            period_id = (metadata or {}).get("code_plan_5h_period_id")
+            if period_id is None and isinstance(subscription.metadata, dict):
+                period_id = subscription.metadata.get("code_plan_5h_period_id")
+            if period_id is not None:
+                system_metadata["code_plan_5h_period_id"] = period_id
         quota_monthly = subscription.plan_snapshot.metadata.get("quota_monthly")
         if quota_monthly is not None:
             system_metadata["code_plan_quota_monthly"] = quota_monthly
@@ -173,3 +188,19 @@ class ProxySubscriptionLiteLLMClient:
         else:
             value = getattr(response, field, None)
         return str(value) if value else None
+
+    def _week_anchor_epoch(self, subscription: SubscriptionRecord) -> int:
+        for value in (subscription.renewed_at, subscription.created_at):
+            if value is None:
+                continue
+            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
+        return int(datetime.now(timezone.utc).timestamp())
+
+    def _iso_or_none(self, value: object) -> str | None:
+        if value is None:
+            return None
+        isoformat = getattr(value, "isoformat", None)
+        if callable(isoformat):
+            return str(isoformat())
+        return str(value)

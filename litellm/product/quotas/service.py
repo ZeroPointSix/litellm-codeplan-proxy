@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Protocol
 
 from litellm.product.quotas.models import (
@@ -11,6 +12,7 @@ from litellm.product.quotas.models import (
     QuotaReserveRequest,
     QuotaSettlementRequest,
     QuotaWindow,
+    ReservationState,
 )
 
 FIVE_HOURS_SECONDS = 5 * 60 * 60
@@ -29,6 +31,8 @@ class QuotaUnavailableError(Exception):
 
 
 class QuotaStore(Protocol):
+    async def resolve_windows(self, subscription_id: str, windows: list[QuotaWindow]) -> list[QuotaWindow]: ...
+
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision: ...
 
     async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision: ...
@@ -65,22 +69,210 @@ def settlement_usage_for_failure(
     return CreditUsage()
 
 
-def quota_windows_from_metadata(metadata: Mapping[str, object]) -> list[QuotaWindow]:
+def _parse_epoch(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, datetime):
+        dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
+def _subscription_week_anchor_epoch(metadata: Mapping[str, object], *, now_epoch: int) -> int:
+    for key in (
+        "code_plan_week_anchor_epoch",
+        "code_plan_period_start_epoch",
+        "code_plan_renewed_at",
+        "code_plan_subscription_started_at",
+        "code_plan_created_at",
+    ):
+        parsed = _parse_epoch(metadata.get(key))
+        if parsed is not None:
+            return parsed
+    return now_epoch
+
+
+def _week_period(anchor_epoch: int, now_epoch: int) -> tuple[str, int, int]:
+    if now_epoch < anchor_epoch:
+        start = anchor_epoch
+    else:
+        elapsed = now_epoch - anchor_epoch
+        periods = elapsed // WEEK_SECONDS
+        start = anchor_epoch + periods * WEEK_SECONDS
+    end = start + WEEK_SECONDS
+    return f"week:{start}", start, end
+
+
+def _month_period(anchor_epoch: int, now_epoch: int) -> tuple[str, int, int]:
+    if now_epoch < anchor_epoch:
+        start = anchor_epoch
+    else:
+        elapsed = now_epoch - anchor_epoch
+        periods = elapsed // MONTH_SECONDS
+        start = anchor_epoch + periods * MONTH_SECONDS
+    end = start + MONTH_SECONDS
+    return f"month:{start}", start, end
+
+
+def quota_windows_from_metadata(
+    metadata: Mapping[str, object],
+    *,
+    now: datetime | None = None,
+) -> list[QuotaWindow]:
+    """Build fixed-anchor windows from key/subscription metadata.
+
+    Notion rules:
+    - 5h window starts at the first successful call of the current week period
+    - weekly window resets every 7 days from subscription start / renew
+    - weekly reset also resets the 5h window
+    """
+    now_dt = now or datetime.now(timezone.utc)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+    now_epoch = int(now_dt.timestamp())
+
+    week_anchor = _subscription_week_anchor_epoch(metadata, now_epoch=now_epoch)
+    week_period_id, week_start, week_end = _week_period(week_anchor, now_epoch)
+
+    five_h_anchor = _parse_epoch(metadata.get("code_plan_5h_anchor_epoch"))
+    if (
+        five_h_anchor is not None
+        and five_h_anchor >= week_start
+        and five_h_anchor < week_end
+        and now_epoch < five_h_anchor + FIVE_HOURS_SECONDS
+    ):
+        five_h_end = five_h_anchor + FIVE_HOURS_SECONDS
+        five_h_period_id = f"5h:{five_h_anchor}"
+        five_h_starts_on_first_success = False
+        five_h_ttl = max(1, five_h_end - now_epoch)
+        five_h_anchor_value: int | None = five_h_anchor
+    else:
+        # Unopened 5h window: period id is scoped to the current week so a weekly
+        # reset cannot reuse prior 5h spend. TTL stretches to week end until the
+        # first successful call anchors the real 5h window.
+        five_h_period_id = f"5h-open:{week_period_id}"
+        five_h_end = week_end
+        five_h_starts_on_first_success = True
+        five_h_ttl = max(1, five_h_end - now_epoch)
+        five_h_anchor_value = None
+
     windows = [
-        QuotaWindow(name="5h", limit=float(metadata["code_plan_quota_5h"]), ttl_seconds=FIVE_HOURS_SECONDS),
-        QuotaWindow(name="week", limit=float(metadata["code_plan_quota_weekly"]), ttl_seconds=WEEK_SECONDS),
+        QuotaWindow(
+            name="5h",
+            limit=float(metadata["code_plan_quota_5h"]),
+            ttl_seconds=five_h_ttl,
+            period_id=five_h_period_id,
+            period_end_epoch=five_h_end,
+            anchor_epoch=five_h_anchor_value,
+            starts_on_first_success=five_h_starts_on_first_success,
+        ),
+        QuotaWindow(
+            name="week",
+            limit=float(metadata["code_plan_quota_weekly"]),
+            ttl_seconds=max(1, week_end - now_epoch),
+            period_id=week_period_id,
+            period_end_epoch=week_end,
+            anchor_epoch=week_start,
+            starts_on_first_success=False,
+        ),
     ]
+
     monthly_limit = metadata.get("code_plan_quota_monthly")
     if monthly_limit is not None:
-        windows.append(QuotaWindow(name="month", limit=float(monthly_limit), ttl_seconds=MONTH_SECONDS))
+        month_anchor = _parse_epoch(metadata.get("code_plan_month_anchor_epoch")) or week_anchor
+        month_period_id, month_start, month_end = _month_period(month_anchor, now_epoch)
+        windows.append(
+            QuotaWindow(
+                name="month",
+                limit=float(monthly_limit),
+                ttl_seconds=max(1, month_end - now_epoch),
+                period_id=month_period_id,
+                period_end_epoch=month_end,
+                anchor_epoch=month_start,
+                starts_on_first_success=False,
+            )
+        )
     return windows
+
+
+def anchored_windows_after_first_success(
+    windows: list[QuotaWindow],
+    *,
+    success_epoch: int | None = None,
+) -> list[QuotaWindow]:
+    """Materialize the 5h fixed window at first successful settlement."""
+    now_epoch = success_epoch if success_epoch is not None else int(datetime.now(timezone.utc).timestamp())
+    updated: list[QuotaWindow] = []
+    for window in windows:
+        if window.name == "5h" and window.starts_on_first_success:
+            end = now_epoch + FIVE_HOURS_SECONDS
+            updated.append(
+                QuotaWindow(
+                    name=window.name,
+                    limit=window.limit,
+                    ttl_seconds=FIVE_HOURS_SECONDS,
+                    period_id=f"5h:{now_epoch}",
+                    period_end_epoch=end,
+                    anchor_epoch=now_epoch,
+                    starts_on_first_success=False,
+                )
+            )
+        else:
+            updated.append(window)
+    return updated
+
+
+def apply_persisted_5h_anchor(windows: list[QuotaWindow], anchor_epoch: int | None) -> list[QuotaWindow]:
+    if anchor_epoch is None:
+        return windows
+    updated: list[QuotaWindow] = []
+    for window in windows:
+        if window.name != "5h":
+            updated.append(window)
+            continue
+        end = anchor_epoch + FIVE_HOURS_SECONDS
+        updated.append(
+            QuotaWindow(
+                name=window.name,
+                limit=window.limit,
+                ttl_seconds=max(1, end - int(datetime.now(timezone.utc).timestamp())),
+                period_id=f"5h:{anchor_epoch}",
+                period_end_epoch=end,
+                anchor_epoch=anchor_epoch,
+                starts_on_first_success=False,
+            )
+        )
+    return updated
 
 
 class InMemoryQuotaStore:
     def __init__(self) -> None:
-        self.spent: dict[tuple[str, str], float] = {}
+        self.spent: dict[tuple[str, str, str], float] = {}
         self.events: dict[tuple[str, str, QuotaEventType], QuotaDecision] = {}
-        self.reservations: dict[tuple[str, str], float] = {}
+        self.reservations: dict[tuple[str, str], dict[str, object]] = {}
+        self.anchors_5h: dict[tuple[str, str], int] = {}
+
+    async def resolve_windows(self, subscription_id: str, windows: list[QuotaWindow]) -> list[QuotaWindow]:
+        week = next((window for window in windows if window.name == "week"), None)
+        if week is None:
+            return windows
+        anchor = self.anchors_5h.get((subscription_id, week.period_id))
+        return apply_persisted_5h_anchor(windows, anchor)
 
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
         event_key = (request.subscription_id, request.request_id, QuotaEventType.RESERVE)
@@ -103,12 +295,15 @@ class InMemoryQuotaStore:
             return decision
 
         for window in request.windows:
-            self.spent[(request.subscription_id, window.name)] = (
-                self.spent.get((request.subscription_id, window.name), 0.0) + reserved_credits
-            )
+            key = (request.subscription_id, window.name, window.period_id)
+            self.spent[key] = self.spent.get(key, 0.0) + reserved_credits
         balances_after = self._balances_before(request.subscription_id, request.windows)
         reservation_key = (request.subscription_id, request.request_id)
-        self.reservations[reservation_key] = reserved_credits
+        self.reservations[reservation_key] = {
+            "reserved_credits": reserved_credits,
+            "state": ReservationState.RESERVED.value,
+            "windows": [window.model_dump() for window in request.windows],
+        }
         decision = QuotaDecision(
             allowed=True,
             request_id=request.request_id,
@@ -118,6 +313,7 @@ class InMemoryQuotaStore:
             credits=reserved_credits,
             balances_before=balances_before,
             balances_after=balances_after,
+            metadata={"reservation_state": ReservationState.RESERVED.value},
         )
         self.events[event_key] = decision
         return decision
@@ -128,7 +324,8 @@ class InMemoryQuotaStore:
             return self.events[event_key].model_copy(update={"idempotent": True})
 
         reservation_key = (request.subscription_id, request.request_id)
-        if reservation_key not in self.reservations:
+        reservation = self.reservations.get(reservation_key)
+        if reservation is None:
             return QuotaDecision(
                 allowed=False,
                 request_id=request.request_id,
@@ -140,15 +337,48 @@ class InMemoryQuotaStore:
                 balances_after={},
                 reason="Quota reservation not found",
             )
-        reserved_credits = self.reservations[reservation_key]
-        balances_before = self._balances_before(request.subscription_id, request.windows)
+
+        reserved_raw = reservation.get("reserved_credits", 0.0)
+        reserved_credits = float(reserved_raw) if isinstance(reserved_raw, (int, float, str)) else 0.0
+        windows = request.windows
+        if request.event_type == QuotaEventType.SETTLE and settled_credits > 0:
+            windows = anchored_windows_after_first_success(windows)
+            reservation["windows"] = [window.model_dump() for window in windows]
+            week = next((window for window in windows if window.name == "week"), None)
+            five = next((window for window in windows if window.name == "5h"), None)
+            if week is not None and five is not None and five.anchor_epoch is not None:
+                self.anchors_5h.setdefault((request.subscription_id, week.period_id), int(five.anchor_epoch))
+
+        balances_before = self._balances_before(request.subscription_id, windows)
         delta = settled_credits - reserved_credits
-        for window in request.windows:
-            self.spent[(request.subscription_id, window.name)] = (
-                self.spent.get((request.subscription_id, window.name), 0.0) + delta
-            )
-        balances_after = self._balances_before(request.subscription_id, request.windows)
-        self.reservations.pop(reservation_key, None)
+        for window in windows:
+            key = (request.subscription_id, window.name, window.period_id)
+            # Move spend from the pre-anchor open period into the fixed 5h period when needed.
+            if window.name == "5h" and not window.starts_on_first_success:
+                open_keys = [
+                    k
+                    for k in self.spent
+                    if k[0] == request.subscription_id and k[1] == "5h" and str(k[2]).startswith("5h-open:")
+                ]
+                open_spent = sum(self.spent.get(k, 0.0) for k in open_keys)
+                if open_spent and key not in self.spent:
+                    self.spent[key] = open_spent
+                    for open_key in open_keys:
+                        self.spent.pop(open_key, None)
+            self.spent[key] = self.spent.get(key, 0.0) + delta
+
+        balances_after = self._balances_before(request.subscription_id, windows)
+        if request.event_type == QuotaEventType.PENDING_USAGE:
+            state = ReservationState.PENDING_USAGE
+        elif request.event_type == QuotaEventType.RELEASE and settled_credits == 0:
+            state = ReservationState.RELEASED
+        else:
+            state = ReservationState.SETTLED
+        if request.event_type == QuotaEventType.PENDING_USAGE:
+            reservation["state"] = state.value
+        else:
+            self.reservations.pop(reservation_key, None)
+
         decision = QuotaDecision(
             allowed=True,
             request_id=request.request_id,
@@ -158,19 +388,35 @@ class InMemoryQuotaStore:
             credits=settled_credits,
             balances_before=balances_before,
             balances_after=balances_after,
+            metadata={
+                "reservation_state": state.value,
+                "windows": [window.model_dump() for window in windows],
+            },
         )
         self.events[event_key] = decision
         return decision
 
     def _balances_before(self, subscription_id: str, windows: list[QuotaWindow]) -> dict[str, float]:
-        return {window.name: window.limit - self.spent.get((subscription_id, window.name), 0.0) for window in windows}
+        balances: dict[str, float] = {}
+        for window in windows:
+            spent = self.spent.get((subscription_id, window.name, window.period_id), 0.0)
+            balances[window.name] = window.limit - spent
+        return balances
 
 
 class QuotaService:
     def __init__(self, store: QuotaStore):
         self.store = store
 
+    async def _with_resolved_windows(self, subscription_id: str, windows: list[QuotaWindow]) -> list[QuotaWindow]:
+        resolve = getattr(self.store, "resolve_windows", None)
+        if resolve is None:
+            return windows
+        return await resolve(subscription_id, windows)
+
     async def reserve(self, request: QuotaReserveRequest) -> QuotaDecision:
+        resolved_windows = await self._with_resolved_windows(request.subscription_id, request.windows)
+        request = request.model_copy(update={"windows": resolved_windows})
         credits = calculate_credits(
             reserve_usage(request.input_usage, request.default_max_output_tokens),
             request.multipliers,
@@ -184,7 +430,13 @@ class QuotaService:
         return decision
 
     async def settle(self, request: QuotaSettlementRequest) -> QuotaDecision:
-        credits = calculate_credits(request.actual_usage, request.multipliers)
+        resolved_windows = await self._with_resolved_windows(request.subscription_id, request.windows)
+        request = request.model_copy(update={"windows": resolved_windows})
+        if request.event_type == QuotaEventType.PENDING_USAGE:
+            # Hold currently reserved credits until usage is confirmed.
+            credits = float(request.reserved_credits)
+        else:
+            credits = calculate_credits(request.actual_usage, request.multipliers)
         try:
             return await self.store.settle(request, credits)
         except Exception as exc:

@@ -7,7 +7,10 @@ from litellm.product.quotas.models import (
     QuotaEventType,
     QuotaReserveRequest,
     QuotaSettlementRequest,
+    QuotaWindow,
+    ReservationState,
 )
+from litellm.product.quotas.service import FIVE_HOURS_SECONDS, anchored_windows_after_first_success
 
 RESERVE_LUA = """
 local event_value = redis.call("GET", KEYS[1])
@@ -26,7 +29,7 @@ local project_id = ARGV[6]
 local window_names = cjson.decode(ARGV[7])
 local n = tonumber(ARGV[8])
 local limits_index = 9
-local ttls_index = limits_index + n
+local ends_index = limits_index + n
 local balances_before = {}
 local balances_after = {}
 local allowed = true
@@ -62,9 +65,9 @@ end
 for i = 1, n do
   local window_key = KEYS[i + 2]
   local limit = tonumber(ARGV[limits_index + i - 1])
-  local ttl = tonumber(ARGV[ttls_index + i - 1])
+  local period_end = tonumber(ARGV[ends_index + i - 1])
   local current = tonumber(redis.call("INCRBYFLOAT", window_key, credits))
-  redis.call("EXPIRE", window_key, ttl)
+  redis.call("EXPIREAT", window_key, period_end)
   balances_after[window_names[i]] = limit - current
 end
 
@@ -79,7 +82,7 @@ local decision = {
   balances_after = balances_after,
   idempotent = false,
   reason = cjson.null,
-  metadata = {}
+  metadata = {reservation_state = "RESERVED"}
 }
 local encoded = cjson.encode(decision)
 redis.call("SET", KEYS[2], reservation_payload, "EX", event_ttl)
@@ -124,7 +127,8 @@ local event_type = ARGV[6]
 local window_names = cjson.decode(ARGV[7])
 local n = tonumber(ARGV[8])
 local limits_index = 9
-local ttls_index = limits_index + n
+local ends_index = limits_index + n
+local open_keys = cjson.decode(ARGV[ends_index + n] or "[]")
 local delta = credits - reserved
 local balances_before = {}
 local balances_after = {}
@@ -139,10 +143,32 @@ end
 for i = 1, n do
   local window_key = KEYS[i + 2]
   local limit = tonumber(ARGV[limits_index + i - 1])
-  local ttl = tonumber(ARGV[ttls_index + i - 1])
+  local period_end = tonumber(ARGV[ends_index + i - 1])
+  local open_key = open_keys[i]
+  if open_key and open_key ~= "" and open_key ~= window_key then
+    local open_spent = tonumber(redis.call("GET", open_key) or "0")
+    if open_spent ~= 0 then
+      local existing = tonumber(redis.call("GET", window_key) or "0")
+      if existing == 0 then
+        redis.call("SET", window_key, open_spent)
+      else
+        redis.call("INCRBYFLOAT", window_key, open_spent)
+      end
+      redis.call("DEL", open_key)
+    end
+  end
   local current = tonumber(redis.call("INCRBYFLOAT", window_key, delta))
-  redis.call("EXPIRE", window_key, ttl)
+  redis.call("EXPIREAT", window_key, period_end)
   balances_after[window_names[i]] = limit - current
+end
+
+local reservation_state = "SETTLED"
+if event_type == "pending_usage" then
+  reservation_state = "PENDING_USAGE"
+elseif event_type == "release" and credits == 0 then
+  reservation_state = "RELEASED"
+elseif event_type == "release" then
+  reservation_state = "SETTLED"
 end
 
 local decision = {
@@ -156,10 +182,15 @@ local decision = {
   balances_after = balances_after,
   idempotent = false,
   reason = cjson.null,
-  metadata = {}
+  metadata = {reservation_state = reservation_state}
 }
 local encoded = cjson.encode(decision)
-redis.call("DEL", KEYS[2])
+if event_type == "pending_usage" then
+  reservation["state"] = reservation_state
+  redis.call("SET", KEYS[2], cjson.encode(reservation), "EX", event_ttl)
+else
+  redis.call("DEL", KEYS[2])
+end
 redis.call("SET", KEYS[1], encoded, "EX", event_ttl)
 return encoded
 """
@@ -171,6 +202,22 @@ class RedisQuotaStore:
         self.key_prefix = key_prefix.rstrip(":")
         self.event_ttl_seconds = event_ttl_seconds
 
+    async def resolve_windows(self, subscription_id: str, windows: list[QuotaWindow]) -> list[QuotaWindow]:
+        from litellm.product.quotas.service import apply_persisted_5h_anchor
+
+        week = next((window for window in windows if window.name == "week"), None)
+        if week is None:
+            return windows
+        key = f"{self.key_prefix}:anchor5h:{subscription_id}:{week.period_id}"
+        raw = await self.redis_client.get(key)
+        if raw is None:
+            return windows
+        try:
+            anchor = int(raw)
+        except (TypeError, ValueError):
+            return windows
+        return apply_persisted_5h_anchor(windows, anchor)
+
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
         keys = self._keys(request.subscription_id, request.request_id, QuotaEventType.RESERVE, request.windows)
         args = self._reserve_args(request, reserved_credits)
@@ -178,21 +225,67 @@ class RedisQuotaStore:
         return self._decision(payload)
 
     async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision:
-        keys = self._keys(request.subscription_id, request.request_id, request.event_type, request.windows)
-        args = self._settle_args(request, settled_credits)
+        windows = list(request.windows)
+        open_period_keys: list[str] = [""] * len(windows)
+        if request.event_type == QuotaEventType.SETTLE and settled_credits > 0:
+            anchored = anchored_windows_after_first_success(windows)
+            open_period_keys = []
+            for before, after in zip(windows, anchored, strict=True):
+                if before.period_id != after.period_id:
+                    open_period_keys.append(self._spent_key(request.subscription_id, before.name, before.period_id))
+                else:
+                    open_period_keys.append("")
+            windows = anchored
+        keys = self._keys(request.subscription_id, request.request_id, request.event_type, windows)
+        args = self._settle_args(request, settled_credits, windows, open_period_keys)
         payload = await self.redis_client.eval(SETTLE_LUA, len(keys), *keys, *args)
-        return self._decision(payload)
+        decision = self._decision(payload)
+        if decision.allowed and decision.metadata is not None:
+            # Expose anchored windows to callers (e.g. hook metadata freeze).
+            decision.metadata = {
+                **decision.metadata,
+                "windows": [window.model_dump() for window in windows],
+            }
+            if request.event_type == QuotaEventType.SETTLE and settled_credits > 0:
+                await self._persist_5h_anchor(request.subscription_id, windows)
+        return decision
 
-    def _ttl_for_windows(self, windows: list) -> int:
+    async def _persist_5h_anchor(self, subscription_id: str, windows: list[QuotaWindow]) -> None:
+        week = next((window for window in windows if window.name == "week"), None)
+        five = next((window for window in windows if window.name == "5h"), None)
+        if week is None or five is None or five.anchor_epoch is None:
+            return
+        key = f"{self.key_prefix}:anchor5h:{subscription_id}:{week.period_id}"
+        # SET NX keeps the first successful call as the fixed 5h anchor.
+        await self.redis_client.set(key, str(int(five.anchor_epoch)), nx=True, exat=int(week.period_end_epoch))
+
+    def _ttl_for_windows(self, windows: list[QuotaWindow]) -> int:
         if not windows:
             return self.event_ttl_seconds
-        return max(self.event_ttl_seconds, max(window.ttl_seconds for window in windows))
+        # Keep reservation/event records at least as long as the longest remaining window.
+        now_epoch = self._now_epoch()
+        max_remaining = max(max(1, window.period_end_epoch - now_epoch, window.ttl_seconds) for window in windows)
+        return max(self.event_ttl_seconds, max_remaining, FIVE_HOURS_SECONDS)
 
-    def _keys(self, subscription_id: str, request_id: str, event_type: QuotaEventType, windows: list) -> list[str]:
+    def _now_epoch(self) -> int:
+        import time
+
+        return int(time.time())
+
+    def _spent_key(self, subscription_id: str, window_name: str, period_id: str) -> str:
+        return f"{self.key_prefix}:spent:{subscription_id}:{window_name}:{period_id}"
+
+    def _keys(
+        self,
+        subscription_id: str,
+        request_id: str,
+        event_type: QuotaEventType,
+        windows: list[QuotaWindow],
+    ) -> list[str]:
         return [
             f"{self.key_prefix}:event:{subscription_id}:{request_id}:{event_type.value}",
             f"{self.key_prefix}:reservation:{subscription_id}:{request_id}",
-            *[f"{self.key_prefix}:spent:{subscription_id}:{window.name}" for window in windows],
+            *[self._spent_key(subscription_id, window.name, window.period_id) for window in windows],
         ]
 
     def _reserve_args(self, request: QuotaReserveRequest, reserved_credits: float) -> list[str]:
@@ -202,6 +295,8 @@ class RedisQuotaStore:
                 "subscription_id": request.subscription_id,
                 "project_id": request.project_id,
                 "reserved_credits": reserved_credits,
+                "state": ReservationState.RESERVED.value,
+                "windows": [window.model_dump() for window in request.windows],
             },
             separators=(",", ":"),
         )
@@ -215,21 +310,28 @@ class RedisQuotaStore:
             json.dumps([window.name for window in request.windows]),
             str(len(request.windows)),
             *[str(window.limit) for window in request.windows],
-            *[str(window.ttl_seconds) for window in request.windows],
+            *[str(window.period_end_epoch) for window in request.windows],
         ]
 
-    def _settle_args(self, request: QuotaSettlementRequest, settled_credits: float) -> list[str]:
+    def _settle_args(
+        self,
+        request: QuotaSettlementRequest,
+        settled_credits: float,
+        windows: list[QuotaWindow],
+        open_period_keys: list[str],
+    ) -> list[str]:
         return [
             str(settled_credits),
-            str(self._ttl_for_windows(request.windows)),
+            str(self._ttl_for_windows(windows)),
             request.request_id,
             request.subscription_id,
             request.project_id or "",
             request.event_type.value,
-            json.dumps([window.name for window in request.windows]),
-            str(len(request.windows)),
-            *[str(window.limit) for window in request.windows],
-            *[str(window.ttl_seconds) for window in request.windows],
+            json.dumps([window.name for window in windows]),
+            str(len(windows)),
+            *[str(window.limit) for window in windows],
+            *[str(window.period_end_epoch) for window in windows],
+            json.dumps(open_period_keys),
         ]
 
     def _decision(self, payload: str | bytes) -> QuotaDecision:

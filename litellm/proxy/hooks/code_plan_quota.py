@@ -197,12 +197,24 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         metadata = self._key_metadata(user_api_key_dict)
         data = request_data if isinstance(request_data, dict) else {}
         reservation = self._reservation_metadata(data, metadata)
+        # Notion: charge confirmed produced tokens on disconnect; if usage is not
+        # available yet, keep the reservation in PENDING_USAGE for compensation.
+        produced_usage = self._produced_usage_from_request_data(data)
+        if produced_usage is None:
+            event_type = QuotaEventType.PENDING_USAGE
+            actual_usage = CreditUsage()
+        elif produced_usage == CreditUsage():
+            event_type = QuotaEventType.RELEASE
+            actual_usage = CreditUsage()
+        else:
+            event_type = QuotaEventType.SETTLE
+            actual_usage = produced_usage
         await self._settle_reserved_usage(
             data=data,
             metadata=metadata,
             reservation=reservation,
-            actual_usage=CreditUsage(),
-            event_type=QuotaEventType.RELEASE,
+            actual_usage=actual_usage,
+            event_type=event_type,
             context="stream disconnect",
         )
 
@@ -252,6 +264,12 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 decision.request_id,
                 decision.reason,
             )
+            return
+        self._apply_window_anchor_from_decision(data, metadata, reservation, decision)
+        if event_type == QuotaEventType.PENDING_USAGE:
+            # Keep reservation open for later compensation; do not mark settled.
+            if isinstance(reservation, dict):
+                reservation["state"] = "PENDING_USAGE"
             return
         self._mark_reservation_settled(data, reservation)
 
@@ -509,6 +527,68 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         if combined_usage is None:
             return None
         return self._usage_from_usage_object(combined_usage)
+
+    def _produced_usage_from_request_data(self, data: dict[str, object]) -> CreditUsage | None:
+        """Best-effort confirmed usage already produced before disconnect."""
+        combined = data.get("combined_usage_object")
+        if combined is not None:
+            return self._usage_from_usage_object(combined)
+
+        logging_obj = data.get("litellm_logging_obj")
+        model_call_details = getattr(logging_obj, "model_call_details", None)
+        if isinstance(model_call_details, dict):
+            combined = model_call_details.get("combined_usage_object")
+            if combined is not None:
+                return self._usage_from_usage_object(combined)
+            complete = model_call_details.get("complete_streaming_response")
+            if complete is not None:
+                usage = self._usage_from_response(complete)
+                if usage != CreditUsage():
+                    return usage
+
+        for channel in ("metadata", "litellm_metadata"):
+            channel_dict = data.get(channel)
+            if not isinstance(channel_dict, dict):
+                continue
+            for key in ("combined_usage_object", "usage", "partial_usage"):
+                value = channel_dict.get(key)
+                if value is not None:
+                    usage = self._usage_from_usage_object(value)
+                    if usage != CreditUsage():
+                        return usage
+        return None
+
+    def _apply_window_anchor_from_decision(
+        self,
+        data: object,
+        metadata: dict[str, object],
+        reservation: dict[str, object],
+        decision: object,
+    ) -> None:
+        decision_metadata = getattr(decision, "metadata", None)
+        if not isinstance(decision_metadata, dict):
+            return
+        windows = decision_metadata.get("windows")
+        if not isinstance(windows, list):
+            return
+        reservation["windows"] = windows
+        for window in windows:
+            if not isinstance(window, dict) or window.get("name") != "5h":
+                continue
+            if window.get("starts_on_first_success"):
+                continue
+            anchor = window.get("anchor_epoch")
+            period_id = window.get("period_id")
+            if anchor is None:
+                continue
+            metadata["code_plan_5h_anchor_epoch"] = anchor
+            if period_id is not None:
+                metadata["code_plan_5h_period_id"] = period_id
+            if isinstance(data, dict):
+                self._stash_value_in_metadata_channels(data, "code_plan_5h_anchor_epoch", anchor)
+                if period_id is not None:
+                    self._stash_value_in_metadata_channels(data, "code_plan_5h_period_id", period_id)
+            break
 
     def _usage_int(self, usage: object, *names: str) -> int:
         for name in names:

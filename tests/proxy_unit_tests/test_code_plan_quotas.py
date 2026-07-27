@@ -1,5 +1,6 @@
 import asyncio
 import os
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -22,17 +23,54 @@ from litellm.product.quotas.service import (
     quota_windows_from_metadata,
     settlement_usage_for_failure,
 )
+
+
+def _spent(store, subscription_id: str, window_name: str) -> float:
+    return sum(
+        amount
+        for (sub_id, name, _period_id), amount in store.spent.items()
+        if sub_id == subscription_id and name == window_name
+    )
+
+
 from litellm.proxy.hooks.code_plan_quota import (
     CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY,
     _PROXY_CodePlanQuotaHandler,
 )
 
 
-def _windows(limit_5h: float = 100, limit_week: float = 500, limit_month: float = 1000):
+def _windows(
+    limit_5h: float = 100, limit_week: float = 500, limit_month: float = 1000, *, now_epoch: int | None = None
+):
+    now = now_epoch if now_epoch is not None else int(datetime.now(timezone.utc).timestamp())
     return [
-        QuotaWindow(name="5h", limit=limit_5h, ttl_seconds=18_000),
-        QuotaWindow(name="week", limit=limit_week, ttl_seconds=604_800),
-        QuotaWindow(name="month", limit=limit_month, ttl_seconds=2_592_000),
+        QuotaWindow(
+            name="5h",
+            limit=limit_5h,
+            ttl_seconds=18_000,
+            period_id=f"5h:{now}",
+            period_end_epoch=now + 18_000,
+            anchor_epoch=now,
+            starts_on_first_success=False,
+        ),
+        QuotaWindow(
+            name="week",
+            limit=limit_week,
+            ttl_seconds=604_800,
+            period_id=f"week:{now}",
+            period_end_epoch=now + 604_800,
+            anchor_epoch=now,
+            starts_on_first_success=False,
+        ),
+        QuotaWindow(
+            name="month",
+            limit=limit_month,
+            ttl_seconds=2_592_000,
+            period_id=f"month:{now}",
+            period_end_epoch=now + 2_592_000,
+            anchor_epoch=now,
+            starts_on_first_success=False,
+        ),
     ]
 
 
@@ -76,16 +114,54 @@ def test_calculate_credits_uses_all_four_multipliers():
 
 
 def test_quota_windows_from_metadata_supports_monthly_window():
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
     windows = quota_windows_from_metadata(
         {
             "code_plan_quota_5h": 100,
             "code_plan_quota_weekly": 500,
             "code_plan_quota_monthly": 2000,
-        }
+            "code_plan_week_anchor_epoch": int(now.timestamp()),
+        },
+        now=now,
     )
 
     assert [window.name for window in windows] == ["5h", "week", "month"]
     assert [window.limit for window in windows] == [100, 500, 2000]
+    assert windows[0].starts_on_first_success is True
+    assert windows[1].period_id.startswith("week:")
+    assert windows[1].ttl_seconds == 7 * 24 * 60 * 60
+
+
+def test_quota_windows_are_fixed_anchor_not_sliding():
+    now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    week_anchor = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
+    metadata = {
+        "code_plan_quota_5h": 100,
+        "code_plan_quota_weekly": 500,
+        "code_plan_week_anchor_epoch": week_anchor,
+        "code_plan_5h_anchor_epoch": int(now.timestamp()) - 3600,
+    }
+    first = quota_windows_from_metadata(metadata, now=now)
+    later = quota_windows_from_metadata(metadata, now=now.replace(hour=13))
+    # Fixed 5h window end does not slide forward with later calls.
+    assert first[0].period_end_epoch == later[0].period_end_epoch
+    assert first[0].ttl_seconds == later[0].ttl_seconds + 3600
+    assert first[1].period_id == later[1].period_id
+
+
+def test_weekly_reset_clears_unopened_5h_period_id():
+    week_anchor = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
+    early = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    after_week = datetime(2026, 1, 9, tzinfo=timezone.utc)
+    metadata = {
+        "code_plan_quota_5h": 100,
+        "code_plan_quota_weekly": 500,
+        "code_plan_week_anchor_epoch": week_anchor,
+    }
+    w1 = quota_windows_from_metadata(metadata, now=early)
+    w2 = quota_windows_from_metadata(metadata, now=after_week)
+    assert w1[0].period_id != w2[0].period_id
+    assert w1[1].period_id != w2[1].period_id
 
 
 @pytest.mark.asyncio
@@ -144,7 +220,7 @@ async def test_reserve_is_idempotent_by_request_and_event_type():
 
     assert first.credits == 15
     assert second.idempotent is True
-    assert store.spent[("sub-1", "5h")] == 15
+    assert _spent(store, "sub-1", "5h") == 15
 
 
 @pytest.mark.asyncio
@@ -175,7 +251,7 @@ async def test_settle_is_idempotent_by_request_and_event_type():
 
     assert first.credits == 12
     assert second.idempotent is True
-    assert store.spent[("sub-1", "5h")] == 12
+    assert _spent(store, "sub-1", "5h") == 12
 
 
 @pytest.mark.asyncio
@@ -220,7 +296,7 @@ async def test_rejected_reserve_is_not_cached_and_can_succeed_after_recovery():
 
     assert retried.allowed is True
     assert retried.idempotent is False
-    assert store.spent[("sub-1", "5h")] == 1
+    assert _spent(store, "sub-1", "5h") == 1
 
 
 @pytest.mark.asyncio
@@ -355,18 +431,33 @@ async def test_quota_hook_disconnect_only_releases_matching_request(monkeypatch)
         data=data_a,
         call_type="acompletion",
     )
-    spent_after_a = store.spent[("sub-1", "5h")]
+    spent_after_a = _spent(store, "sub-1", "5h")
     await handler.async_pre_call_hook(
         user_api_key_dict=user_api_key,
         cache=None,
         data=data_b,
         call_type="acompletion",
     )
-    assert store.spent[("sub-1", "5h")] == spent_after_a + 110
+    assert _spent(store, "sub-1", "5h") == spent_after_a + 110
 
+    # No produced usage on disconnect => PENDING_USAGE holds req-a reservation.
     await handler.async_release_max_parallel_requests_on_disconnect(user_api_key, data_a)
 
-    assert store.spent[("sub-1", "5h")] == 110
+    assert _spent(store, "sub-1", "5h") == spent_after_a + 110
+    assert ("sub-1", "req-a") in store.reservations
+    assert store.reservations[("sub-1", "req-a")]["state"] == "PENDING_USAGE"
+    assert ("sub-1", "req-b") in store.reservations
+
+    # Later compensation with empty usage releases only req-a.
+    await handler._settle_reserved_usage(
+        data=data_a,
+        metadata=user_api_key.metadata,
+        reservation=data_a["metadata"][CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY],
+        actual_usage=CreditUsage(),
+        event_type=QuotaEventType.RELEASE,
+        context="compensate empty",
+    )
+    assert _spent(store, "sub-1", "5h") == 110
     assert ("sub-1", "req-a") not in store.reservations
     assert ("sub-1", "req-b") in store.reservations
 
@@ -379,7 +470,7 @@ async def test_quota_hook_disconnect_only_releases_matching_request(monkeypatch)
         start_time=None,
         end_time=None,
     )
-    assert store.spent[("sub-1", "5h")] == 15
+    assert _spent(store, "sub-1", "5h") == 15
 
 
 def test_redis_reservation_ttl_covers_longest_window():
@@ -500,7 +591,7 @@ async def test_quota_hook_streaming_success_settles_and_post_call_does_not_doubl
         data=data,
         call_type="acompletion",
     )
-    assert store.spent[("sub-1", "5h")] == 110
+    assert _spent(store, "sub-1", "5h") == 110
 
     await handler.async_log_success_event(
         kwargs={
@@ -517,12 +608,12 @@ async def test_quota_hook_streaming_success_settles_and_post_call_does_not_doubl
         response={"usage": {"prompt_tokens": 10, "completion_tokens": 50}},
     )
 
-    assert store.spent[("sub-1", "5h")] == 15
+    assert _spent(store, "sub-1", "5h") == 15
     assert store.events[("sub-1", "req-stream-success", QuotaEventType.SETTLE)].credits == 15
 
 
 @pytest.mark.asyncio
-async def test_quota_hook_disconnect_releases_reserved_credits(monkeypatch):
+async def test_quota_hook_disconnect_settles_produced_tokens(monkeypatch):
     store = InMemoryQuotaStore()
     handler = _PROXY_CodePlanQuotaHandler(QuotaService(store))
     user_api_key = _UserKey(metadata=_code_plan_metadata())
@@ -530,6 +621,7 @@ async def test_quota_hook_disconnect_releases_reserved_credits(monkeypatch):
         "model": "test-model",
         "messages": [{"role": "user", "content": "hello"}],
         "metadata": {"request_id": "req-stream-disconnect"},
+        "combined_usage_object": {"prompt_tokens": 10, "completion_tokens": 3},
     }
     monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
 
@@ -540,11 +632,40 @@ async def test_quota_hook_disconnect_releases_reserved_credits(monkeypatch):
         call_type="acompletion",
     )
     assert CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY in data["metadata"]
+    assert _spent(store, "sub-1", "5h") == 110
 
     await handler.async_release_max_parallel_requests_on_disconnect(user_api_key, data)
 
-    assert store.spent[("sub-1", "5h")] == 0
-    assert store.events[("sub-1", "req-stream-disconnect", QuotaEventType.RELEASE)].credits == 0
+    # Confirmed produced tokens are settled (10 input + 3 output).
+    assert _spent(store, "sub-1", "5h") == 13
+    assert store.events[("sub-1", "req-stream-disconnect", QuotaEventType.SETTLE)].credits == 13
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_disconnect_without_usage_marks_pending(monkeypatch):
+    store = InMemoryQuotaStore()
+    handler = _PROXY_CodePlanQuotaHandler(QuotaService(store))
+    user_api_key = _UserKey(metadata=_code_plan_metadata())
+    data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hello"}],
+        "metadata": {"request_id": "req-stream-pending"},
+    }
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
+
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=data,
+        call_type="acompletion",
+    )
+    reserved = _spent(store, "sub-1", "5h")
+    await handler.async_release_max_parallel_requests_on_disconnect(user_api_key, data)
+
+    # No confirmed usage yet: keep reservation held for compensation.
+    assert _spent(store, "sub-1", "5h") == reserved
+    assert ("sub-1", "req-stream-pending") in store.reservations
+    assert store.events[("sub-1", "req-stream-pending", QuotaEventType.PENDING_USAGE)].credits == reserved
 
 
 def test_quota_hook_token_counter_failure_uses_text_fallback(monkeypatch):
@@ -661,3 +782,61 @@ async def test_quota_service_fails_closed_when_store_is_unavailable():
                 default_max_output_tokens=1,
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_first_success_persists_5h_anchor_for_later_reserves():
+    store = InMemoryQuotaStore()
+    service = QuotaService(store)
+    now = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+    metadata = {
+        "code_plan_quota_5h": 1000,
+        "code_plan_quota_weekly": 5000,
+        "code_plan_week_anchor_epoch": int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()),
+    }
+    windows = quota_windows_from_metadata(metadata, now=now)
+    assert windows[0].starts_on_first_success is True
+
+    reserve = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-anchor-1",
+            subscription_id="sub-anchor",
+            input_usage=CreditUsage(input_tokens=10),
+            multipliers=CreditMultipliers(),
+            windows=windows,
+            default_max_output_tokens=0,
+        )
+    )
+    settled = await service.settle(
+        QuotaSettlementRequest(
+            request_id="req-anchor-1",
+            subscription_id="sub-anchor",
+            actual_usage=CreditUsage(input_tokens=10, output_tokens=2),
+            multipliers=CreditMultipliers(),
+            windows=windows,
+            reserved_credits=reserve.credits,
+        )
+    )
+    assert settled.allowed is True
+    anchored_windows = settled.metadata.get("windows")
+    assert isinstance(anchored_windows, list)
+    five = next(window for window in anchored_windows if window["name"] == "5h")
+    assert five["starts_on_first_success"] is False
+    assert five["period_id"].startswith("5h:")
+
+    # Later reserve without metadata anchor still uses store-persisted fixed window.
+    later_windows = quota_windows_from_metadata(metadata, now=now)
+    assert later_windows[0].starts_on_first_success is True
+    second = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-anchor-2",
+            subscription_id="sub-anchor",
+            input_usage=CreditUsage(input_tokens=1),
+            multipliers=CreditMultipliers(),
+            windows=later_windows,
+            default_max_output_tokens=0,
+        )
+    )
+    assert second.allowed is True
+    week = next(window for window in later_windows if window.name == "week")
+    assert store.anchors_5h[("sub-anchor", week.period_id)] == five["anchor_epoch"]
