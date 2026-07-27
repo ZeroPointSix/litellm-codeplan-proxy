@@ -35,10 +35,10 @@ CODE_PLAN_QUOTA_SETTLED_METADATA_KEY = "_code_plan_quota_settled"
 CODE_PLAN_REQUEST_ID_METADATA_KEY = "code_plan_request_id"
 CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS = 60
 CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS = frozenset(
-    (
+    {
         "code_plan_5h_anchor_epoch",
         "code_plan_5h_period_id",
-    )
+    },
 )
 DEFAULT_CHARS_PER_TOKEN = 4
 
