@@ -34,11 +34,9 @@ CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY = "code_plan_quota_reservation"
 CODE_PLAN_QUOTA_SETTLED_METADATA_KEY = "_code_plan_quota_settled"
 CODE_PLAN_REQUEST_ID_METADATA_KEY = "code_plan_request_id"
 CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS = 60
-CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS = frozenset(
-    {
-        "code_plan_5h_anchor_epoch",
-        "code_plan_5h_period_id",
-    },
+CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS = (
+    "code_plan_5h_anchor_epoch",
+    "code_plan_5h_period_id",
 )
 DEFAULT_CHARS_PER_TOKEN = 4
 
@@ -591,12 +589,27 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         model = data.get("model")
         try:
             if data.get("messages") is not None:
-                return int(litellm.token_counter(model=model, messages=data.get("messages")))
+                return int(
+                    litellm.token_counter(
+                        model=model,
+                        messages=data.get("messages"),
+                    )
+                )
             if data.get("prompt") is not None:
-                return int(litellm.token_counter(model=model, text=str(data.get("prompt"))))
+                return int(
+                    litellm.token_counter(
+                        model=model,
+                        text=str(data.get("prompt")),
+                    )
+                )
             if data.get("input") is not None:
-                return int(litellm.token_counter(model=model, text=str(data.get("input"))))
-        except Exception as exc:  # noqa: BLE001  # litellm.token_counter raises provider-specific errors
+                return int(
+                    litellm.token_counter(
+                        model=model,
+                        text=str(data.get("input")),
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
             estimate = self._fallback_input_token_estimate(data)
             verbose_proxy_logger.debug(
                 "Code Plan quota token estimation used fallback estimate=%s error=%s",
@@ -620,11 +633,10 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             serialized = str(value)
         if not serialized:
             return 0
-        return max(
-            1,
-            (len(serialized) + DEFAULT_CHARS_PER_TOKEN - 1)
-            // DEFAULT_CHARS_PER_TOKEN,
-        )
+        token_estimate = (
+            len(serialized) + DEFAULT_CHARS_PER_TOKEN - 1
+        ) // DEFAULT_CHARS_PER_TOKEN
+        return max(1, token_estimate)
 
     def _usage_from_response(self, response: object) -> CreditUsage:
         usage = self._usage_object(response)
