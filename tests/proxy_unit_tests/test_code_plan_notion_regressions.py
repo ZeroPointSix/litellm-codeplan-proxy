@@ -34,7 +34,11 @@ def _metadata(**overrides):
 def test_caller_metadata_cannot_inject_code_plan_anchor():
     merged = merge_code_plan_key_metadata(
         {"code_plan_quota_5h": 100, "code_plan_week_anchor_epoch": 1},
-        {"code_plan_5h_anchor_epoch": 999, "code_plan_5h_period_id": "5h:999", "caller_trace": "keep"},
+        {
+            "code_plan_5h_anchor_epoch": 999,
+            "code_plan_5h_period_id": "5h:999",
+            "caller_trace": "keep",
+        },
     )
 
     assert merged["caller_trace"] == "keep"
@@ -53,7 +57,12 @@ def test_only_subscription_metadata_can_preserve_existing_5h_anchor():
 
     assert client._preserved_5h_anchor_metadata(_Subscription({})) == {}
     assert client._preserved_5h_anchor_metadata(
-        _Subscription({"code_plan_5h_anchor_epoch": 123, "code_plan_5h_period_id": "5h:123"})
+        _Subscription(
+            {
+                "code_plan_5h_anchor_epoch": 123,
+                "code_plan_5h_period_id": "5h:123",
+            }
+        )
     ) == {"code_plan_5h_anchor_epoch": 123, "code_plan_5h_period_id": "5h:123"}
 
 
@@ -100,7 +109,10 @@ async def test_upstream_5xx_charges_input_without_opening_first_success_anchor()
 async def test_expired_pending_usage_is_compensated_and_releases_hold():
     store = InMemoryQuotaStore()
     service = QuotaService(store)
-    windows = quota_windows_from_metadata(_metadata(), now=datetime(2026, 1, 1, 12, tzinfo=timezone.utc))
+    windows = quota_windows_from_metadata(
+        _metadata(),
+        now=datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
+    )
     reserve = await service.reserve(
         QuotaReserveRequest(
             request_id="req-pending-expire",
@@ -131,4 +143,8 @@ async def test_expired_pending_usage_is_compensated_and_releases_hold():
     assert [decision.event_type for decision in decisions] == [QuotaEventType.EXPIRED, QuotaEventType.COMPENSATED]
     assert decisions[-1].metadata["reservation_state"] == "COMPENSATED"
     assert ("sub-1", "req-pending-expire") not in store.reservations
-    assert sum(amount for (sub_id, _name, _period_id), amount in store.spent.items() if sub_id == "sub-1") == 0
+    assert sum(
+        amount
+        for (sub_id, _name, _period_id), amount in store.spent.items()
+        if sub_id == "sub-1"
+    ) == 0
