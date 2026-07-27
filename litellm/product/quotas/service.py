@@ -18,6 +18,7 @@ from litellm.product.quotas.models import (
 FIVE_HOURS_SECONDS = 5 * 60 * 60
 WEEK_SECONDS = 7 * 24 * 60 * 60
 MONTH_SECONDS = 30 * 24 * 60 * 60
+PENDING_USAGE_TIMEOUT_SECONDS = 15 * 60
 
 
 class QuotaExceededError(Exception):
@@ -260,6 +261,22 @@ def apply_persisted_5h_anchor(windows: list[QuotaWindow], anchor_epoch: int | No
     return updated
 
 
+def _now_epoch() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
+
+
+def _event_state(event_type: QuotaEventType, settled_credits: float) -> ReservationState:
+    if event_type == QuotaEventType.PENDING_USAGE:
+        return ReservationState.PENDING_USAGE
+    if event_type == QuotaEventType.EXPIRED:
+        return ReservationState.EXPIRED
+    if event_type == QuotaEventType.COMPENSATED:
+        return ReservationState.COMPENSATED
+    if event_type == QuotaEventType.RELEASE and settled_credits == 0:
+        return ReservationState.RELEASED
+    return ReservationState.SETTLED
+
+
 class InMemoryQuotaStore:
     def __init__(self) -> None:
         self.spent: dict[tuple[str, str, str], float] = {}
@@ -300,9 +317,13 @@ class InMemoryQuotaStore:
         balances_after = self._balances_before(request.subscription_id, request.windows)
         reservation_key = (request.subscription_id, request.request_id)
         self.reservations[reservation_key] = {
+            "request_id": request.request_id,
+            "subscription_id": request.subscription_id,
+            "project_id": request.project_id,
             "reserved_credits": reserved_credits,
             "state": ReservationState.RESERVED.value,
             "windows": [window.model_dump() for window in request.windows],
+            "created_at_epoch": _now_epoch(),
         }
         decision = QuotaDecision(
             allowed=True,
@@ -341,7 +362,7 @@ class InMemoryQuotaStore:
         reserved_raw = reservation.get("reserved_credits", 0.0)
         reserved_credits = float(reserved_raw) if isinstance(reserved_raw, (int, float, str)) else 0.0
         windows = request.windows
-        if request.event_type == QuotaEventType.SETTLE and settled_credits > 0:
+        if request.event_type == QuotaEventType.SETTLE and settled_credits > 0 and request.anchor_first_success:
             windows = anchored_windows_after_first_success(windows)
             reservation["windows"] = [window.model_dump() for window in windows]
             week = next((window for window in windows if window.name == "week"), None)
@@ -368,14 +389,13 @@ class InMemoryQuotaStore:
             self.spent[key] = self.spent.get(key, 0.0) + delta
 
         balances_after = self._balances_before(request.subscription_id, windows)
-        if request.event_type == QuotaEventType.PENDING_USAGE:
-            state = ReservationState.PENDING_USAGE
-        elif request.event_type == QuotaEventType.RELEASE and settled_credits == 0:
-            state = ReservationState.RELEASED
-        else:
-            state = ReservationState.SETTLED
+        state = _event_state(request.event_type, settled_credits)
         if request.event_type == QuotaEventType.PENDING_USAGE:
             reservation["state"] = state.value
+            reservation["pending_since_epoch"] = _now_epoch()
+        elif request.event_type == QuotaEventType.EXPIRED:
+            reservation["state"] = state.value
+            reservation["expired_at_epoch"] = _now_epoch()
         else:
             self.reservations.pop(reservation_key, None)
 
@@ -395,6 +415,69 @@ class InMemoryQuotaStore:
         )
         self.events[event_key] = decision
         return decision
+
+    async def expire_pending_usage(
+        self,
+        subscription_id: str | None = None,
+        *,
+        older_than_epoch: int | None = None,
+    ) -> list[QuotaDecision]:
+        cutoff = older_than_epoch if older_than_epoch is not None else _now_epoch() - PENDING_USAGE_TIMEOUT_SECONDS
+        decisions: list[QuotaDecision] = []
+        for (sub_id, request_id), reservation in list(self.reservations.items()):
+            if subscription_id is not None and sub_id != subscription_id:
+                continue
+            if reservation.get("state") != ReservationState.PENDING_USAGE.value:
+                continue
+            pending_since = int(reservation.get("pending_since_epoch") or reservation.get("created_at_epoch") or 0)
+            if pending_since > cutoff:
+                continue
+            windows = [QuotaWindow.model_validate(window) for window in reservation.get("windows", [])]
+            reserved_credits = float(reservation.get("reserved_credits", 0.0))
+            decisions.append(
+                await self.settle(
+                    QuotaSettlementRequest(
+                        request_id=str(request_id),
+                        subscription_id=str(sub_id),
+                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        actual_usage=CreditUsage(),
+                        multipliers=CreditMultipliers(),
+                        windows=windows,
+                        reserved_credits=reserved_credits,
+                        event_type=QuotaEventType.EXPIRED,
+                        anchor_first_success=False,
+                    ),
+                    reserved_credits,
+                )
+            )
+        return decisions
+
+    async def compensate_expired_usage(self, subscription_id: str | None = None) -> list[QuotaDecision]:
+        decisions: list[QuotaDecision] = []
+        for (sub_id, request_id), reservation in list(self.reservations.items()):
+            if subscription_id is not None and sub_id != subscription_id:
+                continue
+            if reservation.get("state") != ReservationState.EXPIRED.value:
+                continue
+            windows = [QuotaWindow.model_validate(window) for window in reservation.get("windows", [])]
+            reserved_credits = float(reservation.get("reserved_credits", 0.0))
+            decisions.append(
+                await self.settle(
+                    QuotaSettlementRequest(
+                        request_id=str(request_id),
+                        subscription_id=str(sub_id),
+                        project_id=reservation.get("project_id") if isinstance(reservation.get("project_id"), str) else None,
+                        actual_usage=CreditUsage(),
+                        multipliers=CreditMultipliers(),
+                        windows=windows,
+                        reserved_credits=reserved_credits,
+                        event_type=QuotaEventType.COMPENSATED,
+                        anchor_first_success=False,
+                    ),
+                    0.0,
+                )
+            )
+        return decisions
 
     def _balances_before(self, subscription_id: str, windows: list[QuotaWindow]) -> dict[str, float]:
         balances: dict[str, float] = {}
@@ -432,12 +515,48 @@ class QuotaService:
     async def settle(self, request: QuotaSettlementRequest) -> QuotaDecision:
         resolved_windows = await self._with_resolved_windows(request.subscription_id, request.windows)
         request = request.model_copy(update={"windows": resolved_windows})
-        if request.event_type == QuotaEventType.PENDING_USAGE:
-            # Hold currently reserved credits until usage is confirmed.
+        if request.event_type in {QuotaEventType.PENDING_USAGE, QuotaEventType.EXPIRED}:
+            # Hold currently reserved credits until usage is confirmed or compensation runs.
             credits = float(request.reserved_credits)
+        elif request.event_type == QuotaEventType.COMPENSATED:
+            credits = 0.0
         else:
             credits = calculate_credits(request.actual_usage, request.multipliers)
         try:
             return await self.store.settle(request, credits)
         except Exception as exc:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+
+    async def expire_pending_usage(
+        self,
+        subscription_id: str | None = None,
+        *,
+        older_than_epoch: int | None = None,
+    ) -> list[QuotaDecision]:
+        expire = getattr(self.store, "expire_pending_usage", None)
+        if expire is None:
+            return []
+        cutoff = older_than_epoch if older_than_epoch is not None else _now_epoch() - PENDING_USAGE_TIMEOUT_SECONDS
+        try:
+            return await expire(subscription_id=subscription_id, older_than_epoch=cutoff)
+        except Exception as exc:
+            raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+
+    async def compensate_expired_usage(self, subscription_id: str | None = None) -> list[QuotaDecision]:
+        compensate = getattr(self.store, "compensate_expired_usage", None)
+        if compensate is None:
+            return []
+        try:
+            return await compensate(subscription_id=subscription_id)
+        except Exception as exc:
+            raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+
+    async def compensate_expired_pending_usage(
+        self,
+        subscription_id: str | None = None,
+        *,
+        older_than_epoch: int | None = None,
+    ) -> list[QuotaDecision]:
+        expired = await self.expire_pending_usage(subscription_id=subscription_id, older_than_epoch=older_than_epoch)
+        compensated = await self.compensate_expired_usage(subscription_id=subscription_id)
+        return [*expired, *compensated]
