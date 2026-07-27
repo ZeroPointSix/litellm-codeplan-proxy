@@ -176,11 +176,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             metadata=metadata,
             reservation=reservation,
             actual_usage=actual_usage,
-            event_type=(
-                QuotaEventType.RELEASE
-                if actual_usage == CreditUsage()
-                else QuotaEventType.SETTLE
-            ),
+            event_type=(QuotaEventType.RELEASE if actual_usage == CreditUsage() else QuotaEventType.SETTLE),
             context="post-call failure",
             anchor_first_success=False,
         )
@@ -207,11 +203,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
         input_usage = CreditUsage.model_validate(reservation["input_usage"])
         recovered_usage = self._recovered_failure_usage(kwargs)
-        original_exception = (
-            kwargs.get("exception")
-            if isinstance(kwargs, dict)
-            else None
-        )
+        original_exception = kwargs.get("exception") if isinstance(kwargs, dict) else None
         status_code = self._exception_status_code(original_exception)
         actual_usage = (
             recovered_usage
@@ -227,11 +219,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             metadata=metadata,
             reservation=reservation,
             actual_usage=actual_usage,
-            event_type=(
-                QuotaEventType.RELEASE
-                if actual_usage == CreditUsage()
-                else QuotaEventType.SETTLE
-            ),
+            event_type=(QuotaEventType.RELEASE if actual_usage == CreditUsage() else QuotaEventType.SETTLE),
             context="async failure logging",
             anchor_first_success=False,
         )
@@ -284,10 +272,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         if self._pending_compensation_interval_seconds <= 0:
             return
         now = time.monotonic()
-        if (
-            now - self._last_pending_compensation_sweep_monotonic
-            < self._pending_compensation_interval_seconds
-        ):
+        if now - self._last_pending_compensation_sweep_monotonic < self._pending_compensation_interval_seconds:
             return
         self._last_pending_compensation_sweep_monotonic = now
         try:
@@ -346,8 +331,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
         if not decision.allowed:
             verbose_proxy_logger.warning(
-                "Code Plan quota settlement was not applied during %s: "
-                "request_id=%s reason=%s",
+                "Code Plan quota settlement was not applied during %s: request_id=%s reason=%s",
                 context,
                 decision.request_id,
                 decision.reason,
@@ -414,11 +398,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         return metadata if isinstance(metadata, dict) else {}
 
     def _quota_window_metadata(self, metadata: dict[str, object]) -> dict[str, object]:
-        return {
-            key: value
-            for key, value in metadata.items()
-            if key not in CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS
-        }
+        return {key: value for key, value in metadata.items() if key not in CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS}
 
     @staticmethod
     def _stash_value_in_metadata_channels(
@@ -638,9 +618,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             serialized = str(value)
         if not serialized:
             return 0
-        token_estimate = (
-            len(serialized) + DEFAULT_CHARS_PER_TOKEN - 1
-        ) // DEFAULT_CHARS_PER_TOKEN
+        token_estimate = (len(serialized) + DEFAULT_CHARS_PER_TOKEN - 1) // DEFAULT_CHARS_PER_TOKEN
         return max(1, token_estimate)
 
     def _usage_from_response(self, response: object) -> CreditUsage:
@@ -750,11 +728,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
     def _usage_int(self, usage: object, *names: str) -> int:
         for name in names:
-            value = (
-                usage.get(name)
-                if isinstance(usage, dict)
-                else getattr(usage, name, None)
-            )
+            value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
             if value is not None:
                 return self._int(value, 0)
         return 0
