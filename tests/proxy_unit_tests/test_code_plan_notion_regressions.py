@@ -19,6 +19,10 @@ from litellm.product.subscriptions.litellm_client import (
     ProxySubscriptionLiteLLMClient,
     merge_code_plan_key_metadata,
 )
+from litellm.proxy.hooks.code_plan_quota import (
+    CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY,
+    _PROXY_CodePlanQuotaHandler,
+)
 
 
 def _metadata(**overrides):
@@ -29,6 +33,35 @@ def _metadata(**overrides):
     }
     base.update(overrides)
     return base
+
+
+def _hook_metadata(**overrides):
+    base = {
+        **_metadata(),
+        "code_plan_subscription_id": "sub-1",
+        "code_plan_project_id": "project-1",
+        "code_plan_default_max_output_tokens": 100,
+        "code_plan_credit_input_multiplier": 1,
+        "code_plan_credit_output_multiplier": 1,
+        "code_plan_credit_cache_read_multiplier": 0,
+        "code_plan_credit_cache_write_multiplier": 0,
+    }
+    base.update(overrides)
+    return base
+
+
+def _spent(store, subscription_id: str, window_name: str) -> float:
+    return sum(
+        amount
+        for (sub_id, name, _period_id), amount in store.spent.items()
+        if sub_id == subscription_id and name == window_name
+    )
+
+
+class _UserKey:
+    def __init__(self, metadata):
+        self.metadata = metadata
+        self.parent_otel_span = None
 
 
 def test_caller_metadata_cannot_inject_code_plan_anchor():
@@ -64,6 +97,89 @@ def test_only_subscription_metadata_can_preserve_existing_5h_anchor():
             }
         )
     ) == {"code_plan_5h_anchor_epoch": 123, "code_plan_5h_period_id": "5h:123"}
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_ignores_key_metadata_5h_anchor_injection(monkeypatch):
+    store = InMemoryQuotaStore()
+    handler = _PROXY_CodePlanQuotaHandler(
+        QuotaService(store),
+        pending_compensation_interval_seconds=0,
+    )
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    user_api_key = _UserKey(
+        _hook_metadata(
+            code_plan_week_anchor_epoch=now_epoch - 3600,
+            code_plan_5h_anchor_epoch=now_epoch - 60,
+            code_plan_5h_period_id=f"5h:{now_epoch - 60}",
+        )
+    )
+    data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "hello"}],
+        "metadata": {"request_id": "req-anchor-injection"},
+    }
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
+
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=data,
+        call_type="acompletion",
+    )
+
+    reservation = data["metadata"][CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY]
+    five_h = next(window for window in reservation["windows"] if window["name"] == "5h")
+    assert five_h["starts_on_first_success"] is True
+    assert str(five_h["period_id"]).startswith("5h-open:")
+    assert store.anchors_5h == {}
+
+
+@pytest.mark.asyncio
+async def test_quota_hook_pre_call_sweeps_expired_pending_usage(monkeypatch):
+    store = InMemoryQuotaStore()
+    handler = _PROXY_CodePlanQuotaHandler(
+        QuotaService(store),
+        pending_compensation_interval_seconds=1,
+    )
+    user_api_key = _UserKey(_hook_metadata())
+    monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
+    pending_data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "pending"}],
+        "metadata": {"request_id": "req-pending-runtime"},
+    }
+
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=pending_data,
+        call_type="acompletion",
+    )
+    reserved = _spent(store, "sub-1", "5h")
+    await handler.async_release_max_parallel_requests_on_disconnect(user_api_key, pending_data)
+    store.reservations[("sub-1", "req-pending-runtime")]["pending_since_epoch"] = 0
+    handler._last_pending_compensation_sweep_monotonic = 0
+
+    next_data = {
+        "model": "test-model",
+        "messages": [{"role": "user", "content": "next"}],
+        "metadata": {"request_id": "req-next-runtime"},
+    }
+    await handler.async_pre_call_hook(
+        user_api_key_dict=user_api_key,
+        cache=None,
+        data=next_data,
+        call_type="acompletion",
+    )
+
+    assert ("sub-1", "req-pending-runtime") not in store.reservations
+    assert store.events[("sub-1", "req-pending-runtime", QuotaEventType.EXPIRED)].metadata[
+        "reservation_state"
+    ] == "EXPIRED"
+    assert store.events[("sub-1", "req-pending-runtime", QuotaEventType.COMPENSATED)].credits == 0
+    assert _spent(store, "sub-1", "5h") == reserved
+    assert ("sub-1", "req-next-runtime") in store.reservations
 
 
 @pytest.mark.asyncio
