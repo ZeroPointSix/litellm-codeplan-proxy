@@ -29371,6 +29371,26 @@ export interface components {
              * Format: date-time
              */
             captured_at?: string;
+            /**
+             * Credit Cache Read Multiplier
+             *  0
+             */
+            credit_cache_read_multiplier: number;
+            /**
+             * Credit Cache Write Multiplier
+             *  0
+             */
+            credit_cache_write_multiplier: number;
+            /**
+             * Credit Input Multiplier
+             *  1
+             */
+            credit_input_multiplier: number;
+            /**
+             * Credit Output Multiplier
+             *  1
+             */
+            credit_output_multiplier: number;
             /** Credit Rule Id */
             credit_rule_id?: string | null;
             /** Credit Rule Version */
