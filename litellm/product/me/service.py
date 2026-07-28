@@ -382,6 +382,8 @@ class PortalService:
         input_tokens = self._int(row.get("input_tokens"))
         output_tokens = self._int(row.get("output_tokens"))
         total_tokens = self._int(row.get("total_tokens"))
+        cache_hit_value = row.get("cache_hit")
+        cache_hit = cache_hit_value if isinstance(cache_hit_value, bool) else self._optional_string(cache_hit_value)
         return PortalRequestRecord(
             request_id=self._optional_string(row.get("request_id")),
             start_time=self._optional_datetime(row.get("start_time")),
@@ -391,7 +393,7 @@ class PortalService:
             api_base=self._optional_string(row.get("api_base")),
             call_type=self._optional_string(row.get("call_type")),
             status=self._optional_string(row.get("status")),
-            cache_hit=row.get("cache_hit") if isinstance(row.get("cache_hit"), bool) else self._optional_string(row.get("cache_hit")),
+            cache_hit=cache_hit,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
