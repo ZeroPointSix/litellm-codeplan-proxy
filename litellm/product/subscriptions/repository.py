@@ -95,11 +95,7 @@ class SubscriptionRepository:
     ) -> list[dict[str, Any]]:
         filters: list[dict[str, Any]] = []
         normalized_project_ids = list(
-            dict.fromkeys(
-                project_id.strip()
-                for project_id in project_ids or []
-                if project_id and project_id.strip()
-            )
+            dict.fromkeys(project_id.strip() for project_id in project_ids or [] if project_id and project_id.strip())
         )
         if normalized_project_ids:
             filters.append({"project_id": {"in": normalized_project_ids}})

@@ -146,12 +146,12 @@ class PortalRepository:
         index = start_index
 
         if subscription.litellm_team_id:
-            clauses.append(f'team_id = ${index}')
+            clauses.append(f"team_id = ${index}")
             args.append(subscription.litellm_team_id)
             index += 1
 
         if subscription.litellm_key_ids:
-            clauses.append(f'api_key = ANY(${index}::text[])')
+            clauses.append(f"api_key = ANY(${index}::text[])")
             args.append(subscription.litellm_key_ids)
             index += 1
 
@@ -188,9 +188,7 @@ class PortalRepository:
         if callable(dict_method):
             return dict_method()
         return {
-            key: getattr(row, key)
-            for key in dir(row)
-            if not key.startswith("_") and not callable(getattr(row, key))
+            key: getattr(row, key) for key in dir(row) if not key.startswith("_") and not callable(getattr(row, key))
         }
 
     def _string_list(self, value: object) -> list[str]:

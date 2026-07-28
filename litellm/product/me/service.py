@@ -103,10 +103,7 @@ class PortalService:
             timezone=timezone_name,
             generated_at=now,
             generated_at_local=now.astimezone(tz).isoformat(),
-            windows=[
-                self._quota_window(window, spent_by_name.get(window.name, 0.0), now, tz)
-                for window in windows
-            ],
+            windows=[self._quota_window(window, spent_by_name.get(window.name, 0.0), now, tz) for window in windows],
         )
 
     async def get_usage(
@@ -339,9 +336,7 @@ class PortalService:
     ) -> PortalQuotaWindow:
         reset_at = datetime.fromtimestamp(window.period_end_epoch, tz=timezone.utc)
         anchor_at = (
-            datetime.fromtimestamp(window.anchor_epoch, tz=timezone.utc)
-            if window.anchor_epoch is not None
-            else None
+            datetime.fromtimestamp(window.anchor_epoch, tz=timezone.utc) if window.anchor_epoch is not None else None
         )
         return PortalQuotaWindow(
             name=window.name,
