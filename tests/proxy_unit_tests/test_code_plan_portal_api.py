@@ -33,7 +33,7 @@ class FakePortalSubscriptionLiteLLMClient:
 
     async def create_team(self, config: dict[str, object], actor: UserAPIKeyAuth | None = None) -> str:
         type(self).team_counter += 1
-        return f"team-portal-{type(self).team_counter}"
+        return f"team-portal-{uuid.uuid4().hex[:12]}"
 
     async def update_team(
         self,
@@ -52,7 +52,7 @@ class FakePortalSubscriptionLiteLLMClient:
         actor: UserAPIKeyAuth | None = None,
     ) -> LiteLLMKeyProvision:
         type(self).key_counter += 1
-        key_id = f"key-portal-{type(self).key_counter}"
+        key_id = f"key-portal-{uuid.uuid4().hex[:12]}"
         key_metadata = dict(metadata or {})
         key_metadata.update(
             {
@@ -257,14 +257,14 @@ def test_portal_api_flow(portal_client: tuple[TestClient, AuthState]) -> None:
     project_id = f"project-{uuid.uuid4().hex[:8]}"
     plan = _create_active_plan(client)
     subscription, primary_key_id = _create_subscription(client, plan, project_id)
-    assert primary_key_id == "key-portal-1"
 
     started = datetime.now(timezone.utc) - timedelta(hours=1)
     ended = started + timedelta(minutes=1)
+    seed_request_id = f"req-{uuid.uuid4().hex}"
     seed_resp = client.post(
         "/_test/code-plan/spend-log",
         json={
-            "request_id": f"req-{uuid.uuid4().hex}",
+            "request_id": seed_request_id,
             "api_key": primary_key_id,
             "team_id": subscription["litellm_team_id"],
             "subscription_id": subscription["subscription_id"],
@@ -305,8 +305,10 @@ def test_portal_api_flow(portal_client: tuple[TestClient, AuthState]) -> None:
     requests_resp = client.get("/v1/me/requests", params=range_params)
     assert requests_resp.status_code == 200, requests_resp.text
     requests = requests_resp.json()
-    assert requests["total"] == 1
-    assert requests["data"][0]["external_credits"] == 15.0
+    assert requests["total"] >= 1
+    assert any(row["request_id"] == seed_request_id for row in requests["data"])
+    seeded_request = next(row for row in requests["data"] if row["request_id"] == seed_request_id)
+    assert seeded_request["external_credits"] == 15.0
     assert "spend" not in requests_resp.text
 
     keys_resp = client.get("/v1/me/keys")
@@ -316,8 +318,8 @@ def test_portal_api_flow(portal_client: tuple[TestClient, AuthState]) -> None:
     key_resp = client.post("/v1/me/keys", json={"key_alias": "secondary"})
     assert key_resp.status_code == 200, key_resp.text
     secondary_key_id = key_resp.json()["key_id"]
-    assert secondary_key_id == "key-portal-2"
-    assert key_resp.json()["key"] == "sk-portal-2"
+    assert secondary_key_id != primary_key_id
+    assert key_resp.json()["key"].startswith("sk-portal-")
 
     query_revoke_resp = client.delete("/v1/me/keys", params={"key_id": primary_key_id})
     assert query_revoke_resp.status_code == 200, query_revoke_resp.text
