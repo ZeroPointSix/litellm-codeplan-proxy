@@ -34,8 +34,18 @@ class FakeSubscriptionService:
 
     async def issue_key(self, subscription_id: str, data, actor=None):
         self.issue_call = (subscription_id, data, actor)
-        updated = self.record.model_copy(update={"litellm_key_ids": [*self.record.litellm_key_ids, "key-hash"], "version": 2})
-        return SimpleNamespace(subscription=updated, key_id="key-hash", token_id="token-id", key="sk-user")
+        updated = self.record.model_copy(
+            update={
+                "litellm_key_ids": [*self.record.litellm_key_ids, "key-hash"],
+                "version": 2,
+            }
+        )
+        return SimpleNamespace(
+            subscription=updated,
+            key_id="key-hash",
+            token_id="token-id",
+            key="sk-user",
+        )
 
     async def revoke_key(self, subscription_id: str, data, actor=None):
         self.revoke_call = (subscription_id, data, actor)
@@ -61,7 +71,14 @@ class FakePortalRepository:
     async def request_count(self, subscription: SubscriptionRecord, start_time, end_time):
         return 1
 
-    async def request_rows(self, subscription: SubscriptionRecord, start_time, end_time, page: int, page_size: int):
+    async def request_rows(
+        self,
+        subscription: SubscriptionRecord,
+        start_time,
+        end_time,
+        page: int,
+        page_size: int,
+    ):
         return [
             {
                 "request_id": "req-1",
@@ -121,7 +138,10 @@ def make_user(claims: dict[str, object] | None = None) -> UserAPIKeyAuth:
     )
 
 
-def make_service(record: SubscriptionRecord | None = None, quota_reader=None) -> tuple[PortalService, FakeSubscriptionRepository, FakeSubscriptionService]:
+def make_service(
+    record: SubscriptionRecord | None = None,
+    quota_reader=None,
+) -> tuple[PortalService, FakeSubscriptionRepository, FakeSubscriptionService]:
     record = record or make_record()
     subscription_repository = FakeSubscriptionRepository(record)
     subscription_service = FakeSubscriptionService(record)
