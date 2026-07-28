@@ -83,10 +83,17 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         multipliers = self._multipliers(metadata)
         quota_metadata = self._quota_window_metadata(metadata)
         windows = quota_windows_from_metadata(quota_metadata)
+        model = self._optional_str(data.get("model"))
+        user_id = self._request_user_id(data, metadata)
+        api_key_id = self._api_key_id(user_api_key_dict)
+        rule_version = self._rule_version(metadata)
         reserve_request = QuotaReserveRequest(
             request_id=request_id,
             subscription_id=str(metadata["code_plan_subscription_id"]),
             project_id=self._optional_str(metadata.get("code_plan_project_id")),
+            user_id=user_id,
+            api_key_id=api_key_id,
+            model=model,
             input_usage=input_usage,
             multipliers=multipliers,
             windows=windows,
@@ -94,6 +101,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                 metadata.get("code_plan_default_max_output_tokens"),
                 0,
             ),
+            rule_version=rule_version,
         )
 
         try:
@@ -116,6 +124,10 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             "request_id": request_id,
             "subscription_id": reserve_request.subscription_id,
             "project_id": reserve_request.project_id,
+            "user_id": reserve_request.user_id,
+            "api_key_id": reserve_request.api_key_id,
+            "model": reserve_request.model,
+            "rule_version": reserve_request.rule_version,
             "reserved_credits": decision.credits,
             "input_usage": input_usage.model_dump(),
             "multipliers": multipliers.model_dump(),
@@ -265,8 +277,23 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         import redis.asyncio as redis
 
         redis_client = redis.from_url(redis_url, decode_responses=True)
-        self._quota_service = QuotaService(RedisQuotaStore(redis_client))
+        self._quota_service = QuotaService(
+            RedisQuotaStore(redis_client),
+            ledger_writer=self._usage_ledger_writer(),
+        )
         return self._quota_service
+
+    def _usage_ledger_writer(self) -> object | None:
+        try:
+            from litellm.product.usage_ledger.repository import UsageLedgerRepository
+            from litellm.product.usage_ledger.service import UsageLedgerService
+            from litellm.proxy.proxy_server import prisma_client
+        except (ImportError, RuntimeError) as exc:
+            verbose_proxy_logger.debug("Code Plan usage ledger writer unavailable: %s", exc)
+            return None
+        if prisma_client is None:
+            return None
+        return UsageLedgerService(UsageLedgerRepository(prisma_client))
 
     async def _sweep_expired_pending_usage_if_due(self) -> None:
         if self._pending_compensation_interval_seconds <= 0:
@@ -358,12 +385,16 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             request_id=str(reservation["request_id"]),
             subscription_id=str(reservation["subscription_id"]),
             project_id=self._optional_str(reservation.get("project_id")),
+            user_id=self._optional_str(reservation.get("user_id")),
+            api_key_id=self._optional_str(reservation.get("api_key_id")),
+            model=self._optional_str(reservation.get("model")),
             actual_usage=actual_usage,
             multipliers=self._reservation_multipliers(reservation, metadata),
             windows=self._reservation_windows(reservation, metadata),
             reserved_credits=float(reservation["reserved_credits"]),
             event_type=event_type,
             anchor_first_success=anchor_first_success,
+            rule_version=self._rule_version(reservation, metadata),
         )
 
     def _has_required_quota_metadata(self, metadata: dict[str, object]) -> bool:
@@ -537,6 +568,43 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         reservation = metadata.get(CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY)
         if isinstance(reservation, dict):
             reservation[CODE_PLAN_QUOTA_SETTLED_METADATA_KEY] = True
+
+    def _request_user_id(self, data: dict[str, object], metadata: dict[str, object]) -> str | None:
+        request_metadata = data.get("metadata") if isinstance(data, dict) else None
+        sources = (request_metadata, data, metadata)
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for field_name in (
+                "code_plan_user_id",
+                "user_id",
+                "end_user",
+                "user",
+            ):
+                value = source.get(field_name)
+                if value:
+                    return str(value)
+        return None
+
+    def _api_key_id(self, user_api_key_dict: object) -> str | None:
+        for field_name in ("token_id", "key_id", "api_key", "token"):
+            value = getattr(user_api_key_dict, field_name, None)
+            if value:
+                return str(value)
+        return None
+
+    def _rule_version(self, *sources: dict[str, object]) -> int:
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            for field_name in ("rule_version", "code_plan_credit_rule_version"):
+                value = source.get(field_name)
+                if value is None:
+                    continue
+                parsed = self._int(value, 1)
+                if parsed >= 1:
+                    return parsed
+        return 1
 
     def _request_id(self, metadata: dict[str, object]) -> str:
         request_id = (

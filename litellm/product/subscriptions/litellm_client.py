@@ -168,6 +168,12 @@ class ProxySubscriptionLiteLLMClient:
 
     def _preserved_5h_anchor_metadata(self, subscription: SubscriptionRecord) -> dict[str, Any]:
         """Preserve only system-recorded anchors; ignore caller-supplied key metadata."""
+        window_anchor = self._epoch_or_none(subscription.window_5h_start)
+        if window_anchor is not None:
+            return {
+                "code_plan_5h_anchor_epoch": window_anchor,
+                "code_plan_5h_period_id": f"5h:{window_anchor}",
+            }
         if not isinstance(subscription.metadata, dict):
             return {}
         existing_5h_anchor = subscription.metadata.get("code_plan_5h_anchor_epoch")
@@ -193,12 +199,17 @@ class ProxySubscriptionLiteLLMClient:
         return str(value) if value else None
 
     def _week_anchor_epoch(self, subscription: SubscriptionRecord) -> int:
-        for value in (subscription.renewed_at, subscription.created_at):
-            if value is None:
-                continue
-            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-            return int(dt.timestamp())
+        for value in (subscription.window_week_start, subscription.renewed_at, subscription.created_at):
+            epoch = self._epoch_or_none(value)
+            if epoch is not None:
+                return epoch
         return int(datetime.now(timezone.utc).timestamp())
+
+    def _epoch_or_none(self, value: datetime | None) -> int | None:
+        if value is None:
+            return None
+        dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
 
     def _iso_or_none(self, value: object) -> str | None:
         if value is None:

@@ -65,10 +65,14 @@ class QuotaReserveRequest(BaseModel):
     request_id: str = Field(min_length=1)
     subscription_id: str = Field(min_length=1)
     project_id: str | None = None
+    user_id: str | None = None
+    api_key_id: str | None = None
+    model: str | None = None
     input_usage: CreditUsage
     multipliers: CreditMultipliers
     windows: list[QuotaWindow] = Field(min_length=1)
     default_max_output_tokens: int = Field(ge=0)
+    rule_version: int = Field(default=1, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -77,12 +81,16 @@ class QuotaSettlementRequest(BaseModel):
     request_id: str = Field(min_length=1)
     subscription_id: str = Field(min_length=1)
     project_id: str | None = None
+    user_id: str | None = None
+    api_key_id: str | None = None
+    model: str | None = None
     actual_usage: CreditUsage
     multipliers: CreditMultipliers
     windows: list[QuotaWindow] = Field(min_length=1)
     reserved_credits: float = Field(ge=0)
     event_type: QuotaEventType = QuotaEventType.SETTLE
     anchor_first_success: bool = True
+    rule_version: int = Field(default=1, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 

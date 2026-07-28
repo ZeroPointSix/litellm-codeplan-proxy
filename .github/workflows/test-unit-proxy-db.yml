@@ -104,6 +104,7 @@ jobs:
               tests/proxy_unit_tests/test_code_plan_subscriptions_api.py
               tests/proxy_unit_tests/test_code_plan_quotas.py
               tests/proxy_unit_tests/test_code_plan_notion_regressions.py
+              tests/proxy_unit_tests/test_code_plan_usage_ledger.py
             workers: 0
             dist: loadscope
             timeout: 10

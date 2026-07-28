@@ -4,6 +4,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Protocol
 
+from pydantic import ValidationError
+
+from litellm._logging import verbose_proxy_logger
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
@@ -37,6 +40,16 @@ class QuotaStore(Protocol):
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision: ...
 
     async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision: ...
+
+
+class UsageLedgerWriter(Protocol):
+    async def record_quota_event(
+        self,
+        *,
+        decision: QuotaDecision,
+        request: QuotaReserveRequest | QuotaSettlementRequest,
+        usage: CreditUsage,
+    ) -> None: ...
 
 
 def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> float:
@@ -320,6 +333,10 @@ class InMemoryQuotaStore:
             "request_id": request.request_id,
             "subscription_id": request.subscription_id,
             "project_id": request.project_id,
+            "user_id": request.user_id,
+            "api_key_id": request.api_key_id,
+            "model": request.model,
+            "rule_version": request.rule_version,
             "reserved_credits": reserved_credits,
             "state": ReservationState.RESERVED.value,
             "windows": [window.model_dump() for window in request.windows],
@@ -410,6 +427,7 @@ class InMemoryQuotaStore:
             balances_after=balances_after,
             metadata={
                 "reservation_state": state.value,
+                "settlement_request": request.model_dump(mode="json"),
                 "windows": [window.model_dump() for window in windows],
             },
         )
@@ -442,12 +460,18 @@ class InMemoryQuotaStore:
                         project_id=reservation.get("project_id")
                         if isinstance(reservation.get("project_id"), str)
                         else None,
+                        user_id=reservation.get("user_id") if isinstance(reservation.get("user_id"), str) else None,
+                        api_key_id=reservation.get("api_key_id")
+                        if isinstance(reservation.get("api_key_id"), str)
+                        else None,
+                        model=reservation.get("model") if isinstance(reservation.get("model"), str) else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
                         reserved_credits=reserved_credits,
                         event_type=QuotaEventType.EXPIRED,
                         anchor_first_success=False,
+                        rule_version=int(reservation.get("rule_version") or 1),
                     ),
                     reserved_credits,
                 )
@@ -471,12 +495,18 @@ class InMemoryQuotaStore:
                         project_id=reservation.get("project_id")
                         if isinstance(reservation.get("project_id"), str)
                         else None,
+                        user_id=reservation.get("user_id") if isinstance(reservation.get("user_id"), str) else None,
+                        api_key_id=reservation.get("api_key_id")
+                        if isinstance(reservation.get("api_key_id"), str)
+                        else None,
+                        model=reservation.get("model") if isinstance(reservation.get("model"), str) else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
                         reserved_credits=reserved_credits,
                         event_type=QuotaEventType.COMPENSATED,
                         anchor_first_success=False,
+                        rule_version=int(reservation.get("rule_version") or 1),
                     ),
                     0.0,
                 )
@@ -492,8 +522,9 @@ class InMemoryQuotaStore:
 
 
 class QuotaService:
-    def __init__(self, store: QuotaStore):
+    def __init__(self, store: QuotaStore, ledger_writer: UsageLedgerWriter | None = None):
         self.store = store
+        self.ledger_writer = ledger_writer
 
     async def _with_resolved_windows(self, subscription_id: str, windows: list[QuotaWindow]) -> list[QuotaWindow]:
         resolve = getattr(self.store, "resolve_windows", None)
@@ -504,32 +535,65 @@ class QuotaService:
     async def reserve(self, request: QuotaReserveRequest) -> QuotaDecision:
         resolved_windows = await self._with_resolved_windows(request.subscription_id, request.windows)
         request = request.model_copy(update={"windows": resolved_windows})
-        credits = calculate_credits(
-            reserve_usage(request.input_usage, request.default_max_output_tokens),
-            request.multipliers,
-        )
+        usage = reserve_usage(request.input_usage, request.default_max_output_tokens)
+        credits = calculate_credits(usage, request.multipliers)
         try:
             decision = await self.store.reserve(request, credits)
         except Exception as exc:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
         if not decision.allowed:
             raise QuotaExceededError(decision)
+        await self._record_quota_event(decision=decision, request=request, usage=usage)
         return decision
 
     async def settle(self, request: QuotaSettlementRequest) -> QuotaDecision:
         resolved_windows = await self._with_resolved_windows(request.subscription_id, request.windows)
         request = request.model_copy(update={"windows": resolved_windows})
         if request.event_type in {QuotaEventType.PENDING_USAGE, QuotaEventType.EXPIRED}:
-            # Hold currently reserved credits until usage is confirmed or compensation runs.
-            credits = float(request.reserved_credits)
+            usage = request.actual_usage
         elif request.event_type == QuotaEventType.COMPENSATED:
-            credits = 0.0
+            usage = CreditUsage()
         else:
-            credits = calculate_credits(request.actual_usage, request.multipliers)
+            usage = request.actual_usage
+        credits = self._settlement_credits(request)
         try:
-            return await self.store.settle(request, credits)
+            decision = await self.store.settle(request, credits)
         except Exception as exc:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+        await self._record_quota_event(decision=decision, request=request, usage=usage)
+        return decision
+
+    async def _record_quota_event(
+        self,
+        *,
+        decision: QuotaDecision,
+        request: QuotaReserveRequest | QuotaSettlementRequest,
+        usage: CreditUsage,
+    ) -> None:
+        if self.ledger_writer is None:
+            return
+        try:
+            await self.ledger_writer.record_quota_event(decision=decision, request=request, usage=usage)
+        except (RuntimeError, TypeError, ValueError):
+            verbose_proxy_logger.exception(
+                "Code Plan usage ledger write failed: request_id=%s event_type=%s subscription_id=%s",
+                decision.request_id,
+                decision.event_type.value,
+                decision.subscription_id,
+            )
+            return
+
+    def _settlement_credits(self, request: QuotaSettlementRequest) -> float:
+        if request.event_type in {QuotaEventType.PENDING_USAGE, QuotaEventType.EXPIRED}:
+            return float(request.reserved_credits)
+        if request.event_type == QuotaEventType.COMPENSATED:
+            return 0.0
+        return calculate_credits(request.actual_usage, request.multipliers)
+
+    def _settlement_usage(self, request: QuotaSettlementRequest) -> CreditUsage:
+        if request.event_type == QuotaEventType.COMPENSATED:
+            return CreditUsage()
+        return request.actual_usage
 
     async def expire_pending_usage(
         self,
@@ -542,7 +606,9 @@ class QuotaService:
             return []
         cutoff = older_than_epoch if older_than_epoch is not None else _now_epoch() - PENDING_USAGE_TIMEOUT_SECONDS
         try:
-            return await expire(subscription_id=subscription_id, older_than_epoch=cutoff)
+            decisions = await expire(subscription_id=subscription_id, older_than_epoch=cutoff)
+            await self._record_settlement_decisions(decisions)
+            return decisions
         except Exception as exc:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
 
@@ -551,9 +617,26 @@ class QuotaService:
         if compensate is None:
             return []
         try:
-            return await compensate(subscription_id=subscription_id)
+            decisions = await compensate(subscription_id=subscription_id)
+            await self._record_settlement_decisions(decisions)
+            return decisions
         except Exception as exc:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+
+    async def _record_settlement_decisions(self, decisions: list[QuotaDecision]) -> None:
+        for decision in decisions:
+            request_data = decision.metadata.get("settlement_request")
+            if not isinstance(request_data, dict):
+                continue
+            try:
+                request = QuotaSettlementRequest.model_validate(request_data)
+            except ValidationError:
+                continue
+            await self._record_quota_event(
+                decision=decision,
+                request=request,
+                usage=self._settlement_usage(request),
+            )
 
     async def compensate_expired_pending_usage(
         self,

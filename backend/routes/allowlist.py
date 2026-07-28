@@ -56,7 +56,11 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     "/v1/admin/plans/",
     "/v1/admin/credit-rules/",
     "/v1/admin/subscriptions/",
+<<<<<<< HEAD
     "/v1/me/",
+=======
+    "/v1/admin/usage-ledger/",
+>>>>>>> origin/litellm_internal_staging
     # Tools / agents (registry & policy admin)
     "/v1/tool/",
     "/v1/agents",
@@ -90,7 +94,7 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     "/active/callbacks",
     "/callbacks",
     "/team_callback",
-    # Rust data-plane gateway → proxy control-plane API (logging today, auth later)
+    # Rust data-plane gateway -> proxy control-plane API (logging today, auth later)
     "/v1/rust_control_plane/",
     # Alerting / email / IP allowlist
     "/alerting/",
@@ -145,6 +149,9 @@ BACKEND_EXACT_PATHS: frozenset[str] = frozenset(
         "/v1/admin/plans",
         "/v1/admin/credit-rules",
         "/v1/admin/subscriptions",
+        "/v1/admin/usage-ledger",
+        "/v1/admin/usage-ledger/manual-adjust",
+        "/v1/admin/usage-ledger/summary",
     }
 )
 
