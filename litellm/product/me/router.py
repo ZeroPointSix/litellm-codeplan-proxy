@@ -45,6 +45,11 @@ for route in PORTAL_SELF_MANAGED_ROUTES:
 
 router = APIRouter(prefix="/v1/me", tags=["Code Plan Portal"])
 PortalUser = Annotated[UserAPIKeyAuth, Depends(user_api_key_auth)]
+PortalTimezone = Annotated[str, Query(alias="timezone")]
+PortalOptionalTime = Annotated[datetime | None, Query()]
+PortalPage = Annotated[int, Query(ge=1)]
+PortalPageSize = Annotated[int, Query(ge=1, le=200)]
+PortalKeyIdQuery = Annotated[str, Query(min_length=1)]
 
 
 def _get_service(require_quota_reader: bool = False) -> PortalService:
@@ -92,7 +97,7 @@ async def get_my_subscription(user_api_key_dict: PortalUser) -> PortalSubscripti
 @router.get("/quota", response_model=PortalQuotaResponse)
 async def get_my_quota(
     user_api_key_dict: PortalUser,
-    timezone_name: str = Query(default="UTC", alias="timezone"),
+    timezone_name: PortalTimezone = "UTC",
 ) -> PortalQuotaResponse:
     return await _get_service(require_quota_reader=True).get_quota(
         user_api_key_dict=user_api_key_dict,
@@ -103,9 +108,9 @@ async def get_my_quota(
 @router.get("/usage", response_model=PortalUsageResponse)
 async def get_my_usage(
     user_api_key_dict: PortalUser,
-    timezone_name: str = Query(default="UTC", alias="timezone"),
-    start_time: datetime | None = Query(default=None),
-    end_time: datetime | None = Query(default=None),
+    timezone_name: PortalTimezone = "UTC",
+    start_time: PortalOptionalTime = None,
+    end_time: PortalOptionalTime = None,
 ) -> PortalUsageResponse:
     return await _get_service().get_usage(
         user_api_key_dict=user_api_key_dict,
@@ -118,10 +123,10 @@ async def get_my_usage(
 @router.get("/requests", response_model=PortalRequestListResponse)
 async def get_my_requests(
     user_api_key_dict: PortalUser,
-    start_time: datetime | None = Query(default=None),
-    end_time: datetime | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    start_time: PortalOptionalTime = None,
+    end_time: PortalOptionalTime = None,
+    page: PortalPage = 1,
+    page_size: PortalPageSize = 50,
 ) -> PortalRequestListResponse:
     return await _get_service().get_requests(
         user_api_key_dict=user_api_key_dict,
@@ -148,7 +153,7 @@ async def create_my_key(
 @router.delete("/keys", response_model=PortalKeyRevokeResponse)
 async def revoke_my_key_by_query(
     user_api_key_dict: PortalUser,
-    key_id: str = Query(..., min_length=1),
+    key_id: PortalKeyIdQuery,
 ) -> PortalKeyRevokeResponse:
     return await _get_service().revoke_key(user_api_key_dict, key_id)
 
