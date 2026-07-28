@@ -2583,7 +2583,11 @@ class ProxyLogging:
             logging_obj._deferred_stream_complete_args = None
             asyncio.create_task(_deferred_cb(*_args))
 
-    def _release_max_parallel_requests_on_disconnect(self, user_api_key_dict: UserAPIKeyAuth) -> None:
+    def _release_max_parallel_requests_on_disconnect(
+        self,
+        user_api_key_dict: UserAPIKeyAuth,
+        request_data: dict | None = None,
+    ) -> None:
         """
         Release the api-key max_parallel_requests slot when a streaming
         response is cancelled mid-flight (client disconnect). Neither the
@@ -2600,17 +2604,40 @@ class ProxyLogging:
         permitted while unwinding a GeneratorExit.
         """
         limiter = self.get_proxy_hook("parallel_request_limiter")
-        if not isinstance(limiter, _PROXY_MaxParallelRequestsHandler_v3):
-            return
+        if isinstance(limiter, _PROXY_MaxParallelRequestsHandler_v3):
+            self._schedule_disconnect_cleanup(
+                limiter.async_release_max_parallel_requests_on_disconnect,
+                user_api_key_dict,
+                hook_name="parallel_request_limiter_v3",
+            )
+
+        quota_hook = self.get_proxy_hook("code_plan_quota")
+        if quota_hook is not None:
+            release_quota = getattr(quota_hook, "async_release_max_parallel_requests_on_disconnect", None)
+            if callable(release_quota):
+
+                async def _release_code_plan_quota(_user_api_key_dict: UserAPIKeyAuth) -> None:
+                    await release_quota(_user_api_key_dict, request_data)
+
+                self._schedule_disconnect_cleanup(
+                    _release_code_plan_quota,
+                    user_api_key_dict,
+                    hook_name="code_plan_quota",
+                )
+
+    def _schedule_disconnect_cleanup(
+        self,
+        callback: Any,
+        user_api_key_dict: UserAPIKeyAuth,
+        *,
+        hook_name: str,
+    ) -> None:
         try:
-            asyncio.create_task(limiter.async_release_max_parallel_requests_on_disconnect(user_api_key_dict))
+            asyncio.create_task(callback(user_api_key_dict))
         except RuntimeError:
-            # No running event loop (e.g. interpreter/loop shutdown); the
-            # counter's window TTL will reclaim the slot.
             verbose_proxy_logger.warning(
-                "parallel_request_limiter_v3: could not schedule "
-                "max_parallel_requests release on disconnect; no running "
-                "event loop. Slot will be reclaimed when its window TTL expires"
+                "%s: could not schedule disconnect cleanup; no running event loop",
+                hook_name,
             )
 
     def _init_response_taking_too_long_task(self, data: Optional[dict] = None):

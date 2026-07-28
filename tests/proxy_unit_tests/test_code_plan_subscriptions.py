@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
+from litellm.product.credit_rules.models import CreditRuleRecord, CreditRuleStatus
 from litellm.product.plans.models import PlanRecord, PlanStatus
 from litellm.product.subscriptions.litellm_client import (
     CODE_PLAN_GATEWAY_ALLOWED_ROUTES,
@@ -181,11 +182,33 @@ def _plan(**overrides) -> PlanRecord:
     return PlanRecord(**data)
 
 
+def _credit_rule(**overrides) -> CreditRuleRecord:
+    data = {
+        "id": "rule-version-1",
+        "credit_rule_id": "rule-1",
+        "name": "Rule One",
+        "status": CreditRuleStatus.ACTIVE,
+        "version": 1,
+        "input_multiplier": 1.2,
+        "output_multiplier": 3.4,
+        "cache_read_multiplier": 0.2,
+        "cache_write_multiplier": 0.8,
+        "metadata": {},
+    }
+    data.update(overrides)
+    return CreditRuleRecord(**data)
+
+
 def _service(plan_records: list[PlanRecord] | None = None, client: FakeLiteLLMClient | None = None):
     plan_repository = InMemoryPlanRepository(plan_records or [_plan()])
     repository = InMemorySubscriptionRepository()
     litellm_client = client or FakeLiteLLMClient()
-    return SubscriptionService(repository, plan_repository, litellm_client=litellm_client), repository, plan_repository, litellm_client
+    return (
+        SubscriptionService(repository, plan_repository, litellm_client=litellm_client),
+        repository,
+        plan_repository,
+        litellm_client,
+    )
 
 
 def test_code_plan_subscription_routes_are_management_routes():
@@ -197,7 +220,10 @@ def test_code_plan_subscription_routes_are_management_routes():
     assert RouteChecks.check_route_access(route="/v1/admin/subscriptions/sub-1", allowed_routes=management_routes)
     assert RouteChecks.check_route_access(route="/v1/admin/subscriptions/sub-1/renew", allowed_routes=management_routes)
     assert RouteChecks.check_route_access(route="/v1/admin/subscriptions/sub-1/keys", allowed_routes=management_routes)
-    assert RouteChecks.check_route_access(route="/v1/admin/subscriptions/sub-1/keys/revoke", allowed_routes=management_routes)
+    assert RouteChecks.check_route_access(
+        route="/v1/admin/subscriptions/sub-1/keys/revoke",
+        allowed_routes=management_routes,
+    )
 
 
 def test_code_plan_subscription_keys_are_gateway_limited():
@@ -212,11 +238,31 @@ def test_code_plan_subscription_keys_are_gateway_limited():
     assert exc.value.status_code == 403
 
 
+def test_plan_snapshot_freezes_credit_rule_multipliers():
+    snapshot = plan_snapshot_from_plan(
+        _plan(credit_rule_id="rule-1"),
+        _credit_rule(
+            input_multiplier=2.0,
+            output_multiplier=4.0,
+            cache_read_multiplier=0.25,
+            cache_write_multiplier=0.75,
+        ),
+    )
+
+    assert snapshot.credit_rule_version == 1
+    assert snapshot.credit_input_multiplier == 2.0
+    assert snapshot.credit_output_multiplier == 4.0
+    assert snapshot.credit_cache_read_multiplier == 0.25
+    assert snapshot.credit_cache_write_multiplier == 0.75
+
+
 @pytest.mark.asyncio
 async def test_create_subscription_freezes_snapshot_and_provisions_team_key():
     service, _, plan_repository, litellm_client = _service()
 
-    response = await service.create_subscription(SubscriptionCreateRequest(project_id="project-1", plan_id="plan-basic"))
+    response = await service.create_subscription(
+        SubscriptionCreateRequest(project_id="project-1", plan_id="plan-basic")
+    )
 
     subscription = response.subscription
     assert subscription.status == SubscriptionStatus.ACTIVE
@@ -239,7 +285,14 @@ async def test_create_subscription_freezes_snapshot_and_provisions_team_key():
     assert team_config["rpm_limit"] == 60
     assert team_config["tpm_limit"] == 120000
     assert team_config["max_parallel_requests"] == 4
-    assert team_config["budget_limits"] == [{"budget_duration": "7d", "max_budget": 1000.0}]
+    assert "budget_limits" not in team_config
+    assert "max_budget" not in team_config
+    assert team_config["metadata"]["code_plan_quota_5h"] == 100
+    assert team_config["metadata"]["code_plan_quota_weekly"] == 1000
+    assert team_config["metadata"]["code_plan_credit_input_multiplier"] == 1.0
+    assert team_config["metadata"]["code_plan_credit_output_multiplier"] == 1.0
+    assert team_config["metadata"]["code_plan_credit_cache_read_multiplier"] == 0.0
+    assert team_config["metadata"]["code_plan_credit_cache_write_multiplier"] == 0.0
     assert litellm_client.generated_keys[0][0] == "team-1"
 
 
@@ -281,7 +334,10 @@ async def test_subscription_version_conflict_returns_409():
         )
 
     assert exc.value.status_code == 409
-    assert exc.value.detail == {"error": "Subscription version conflict", "current_version": created.subscription.version}
+    assert exc.value.detail == {
+        "error": "Subscription version conflict",
+        "current_version": created.subscription.version,
+    }
 
 
 @pytest.mark.asyncio
@@ -472,10 +528,6 @@ async def test_proxy_client_generates_gateway_limited_key(monkeypatch):
     )
 
     request = captured["request"]
-    budget_limits = [
-        window.model_dump(exclude_none=True) if hasattr(window, "model_dump") else dict(window)
-        for window in request.budget_limits or []
-    ]
     assert provision.key_id == "key-live-1"
     assert provision.key == "sk-live-1"
     assert request.team_id == "team-1"
@@ -484,7 +536,55 @@ async def test_proxy_client_generates_gateway_limited_key(monkeypatch):
     assert request.rpm_limit == 60
     assert request.tpm_limit == 120000
     assert request.max_parallel_requests == 4
-    assert request.max_budget == 1000.0
-    assert budget_limits == [{"budget_duration": "7d", "max_budget": 1000.0}]
+    assert request.max_budget is None
+    assert request.budget_limits is None
     assert request.metadata["code_plan_subscription_id"] == "sub-1"
+    assert request.metadata["code_plan_quota_5h"] == 100
+    assert request.metadata["code_plan_quota_weekly"] == 1000
+    assert request.metadata["code_plan_default_max_output_tokens"] == 4096
+    assert request.metadata["code_plan_credit_input_multiplier"] == 1.0
+    assert request.metadata["code_plan_credit_output_multiplier"] == 1.0
+    assert request.metadata["code_plan_credit_cache_read_multiplier"] == 0.0
+    assert request.metadata["code_plan_credit_cache_write_multiplier"] == 0.0
+    assert request.metadata["code_plan_native_budget_disabled"] is True
     assert request.metadata["source"] == "unit-test"
+
+
+@pytest.mark.asyncio
+async def test_proxy_client_rejects_user_metadata_overriding_code_plan_fields(monkeypatch):
+    from litellm.proxy.management_endpoints import key_management_endpoints
+
+    captured: dict[str, Any] = {}
+
+    async def fake_generate_key_fn(data, user_api_key_dict, litellm_changed_by):
+        captured["request"] = data
+        return {"token_id": "key-live-1", "key": "sk-live-1"}
+
+    monkeypatch.setattr(key_management_endpoints, "generate_key_fn", fake_generate_key_fn)
+    subscription = SubscriptionRecord(
+        subscription_id="sub-1",
+        project_id="project-1",
+        plan_id="plan-basic",
+        status=SubscriptionStatus.ACTIVE,
+        plan_snapshot=plan_snapshot_from_plan(_plan()),
+        litellm_team_id="team-1",
+        litellm_key_ids=[],
+        version=1,
+    )
+
+    await ProxySubscriptionLiteLLMClient().generate_key(
+        "team-1",
+        subscription,
+        metadata={
+            "source": "unit-test",
+            "code_plan_quota_5h": 1,
+            "code_plan_subscription_id": "evil-sub",
+            "code_plan_native_budget_disabled": False,
+        },
+    )
+
+    metadata = captured["request"].metadata
+    assert metadata["source"] == "unit-test"
+    assert metadata["code_plan_quota_5h"] == 100
+    assert metadata["code_plan_subscription_id"] == "sub-1"
+    assert metadata["code_plan_native_budget_disabled"] is True

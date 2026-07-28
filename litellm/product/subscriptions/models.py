@@ -22,6 +22,10 @@ class PlanSnapshot(PlanEntitlements):
     description: str | None = None
     plan_version: int = Field(ge=1)
     credit_rule_version: int | None = Field(default=None, ge=1)
+    credit_input_multiplier: float = Field(default=1.0, ge=0)
+    credit_output_multiplier: float = Field(default=1.0, ge=0)
+    credit_cache_read_multiplier: float = Field(default=0.0, ge=0)
+    credit_cache_write_multiplier: float = Field(default=0.0, ge=0)
     captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(extra="forbid")

@@ -7,6 +7,7 @@ on:
       - litellm_zer_151_credit_rules
       - litellm_zer_152_153_subscription
       - codex/zer-154-gateway-hooks-mvp
+      - codex/zer-155-code-plan-quota-service
     paths:
       - ".github/workflows/code-plan-pr-checks.yml"
       - "backend/routes/allowlist.py"
@@ -14,12 +15,17 @@ on:
       - "litellm/product/plans/**"
       - "litellm/product/credit_rules/**"
       - "litellm/product/subscriptions/**"
+      - "litellm/product/quotas/**"
+      - "litellm/proxy/hooks/code_plan_quota.py"
+      - "litellm/proxy/hooks/__init__.py"
       - "tests/proxy_unit_tests/test_code_plan_gateway.py"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
       - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
       - "tests/proxy_unit_tests/test_code_plan_credit_rules_api.py"
       - "tests/proxy_unit_tests/test_code_plan_subscriptions.py"
       - "tests/proxy_unit_tests/test_code_plan_subscriptions_api.py"
+      - "tests/proxy_unit_tests/test_code_plan_quotas.py"
+      - "tests/proxy_unit_tests/test_code_plan_notion_regressions.py"
       - "tests/proxy_unit_tests/code_plan_api_test_utils.py"
       - "scripts/code_plan_subscription_live_e2e.sh"
       - "schema.prisma"
@@ -38,12 +44,17 @@ on:
       - "litellm/product/plans/**"
       - "litellm/product/credit_rules/**"
       - "litellm/product/subscriptions/**"
+      - "litellm/product/quotas/**"
+      - "litellm/proxy/hooks/code_plan_quota.py"
+      - "litellm/proxy/hooks/__init__.py"
       - "tests/proxy_unit_tests/test_code_plan_gateway.py"
       - "tests/proxy_unit_tests/test_code_plan_plans.py"
       - "tests/proxy_unit_tests/test_code_plan_credit_rules.py"
       - "tests/proxy_unit_tests/test_code_plan_credit_rules_api.py"
       - "tests/proxy_unit_tests/test_code_plan_subscriptions.py"
       - "tests/proxy_unit_tests/test_code_plan_subscriptions_api.py"
+      - "tests/proxy_unit_tests/test_code_plan_quotas.py"
+      - "tests/proxy_unit_tests/test_code_plan_notion_regressions.py"
       - "tests/proxy_unit_tests/code_plan_api_test_utils.py"
       - "scripts/code_plan_subscription_live_e2e.sh"
       - "schema.prisma"
@@ -64,6 +75,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/litellm
       CODE_PLAN_API_INTEGRATION: "true"
+      CODE_PLAN_REDIS_INTEGRATION: "true"
+      CODE_PLAN_QUOTA_REDIS_URL: redis://localhost:6379/0
     services:
       postgres:
         image: postgres:16
@@ -75,6 +88,15 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -101,13 +123,13 @@ jobs:
         run: .venv/bin/prisma db push --schema litellm/proxy/schema.prisma --accept-data-loss --skip-generate
 
       - name: Run Code Plan unit pytest
-        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_gateway.py tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py tests/proxy_unit_tests/test_code_plan_subscriptions.py -q
+        run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_gateway.py tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py tests/proxy_unit_tests/test_code_plan_subscriptions.py tests/proxy_unit_tests/test_code_plan_quotas.py tests/proxy_unit_tests/test_code_plan_notion_regressions.py -q
 
       - name: Run Code Plan API integration pytest
         run: .venv/bin/pytest tests/proxy_unit_tests/test_code_plan_credit_rules_api.py tests/proxy_unit_tests/test_code_plan_subscriptions_api.py -q
 
       - name: Run Code Plan ruff
-        run: .venv/bin/ruff check gateway litellm/product/plans litellm/product/credit_rules litellm/product/subscriptions tests/proxy_unit_tests/test_code_plan_gateway.py tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py tests/proxy_unit_tests/test_code_plan_credit_rules_api.py tests/proxy_unit_tests/test_code_plan_subscriptions.py tests/proxy_unit_tests/test_code_plan_subscriptions_api.py tests/proxy_unit_tests/code_plan_api_test_utils.py
+        run: .venv/bin/ruff check gateway litellm/product/plans litellm/product/credit_rules litellm/product/subscriptions litellm/product/quotas litellm/proxy/hooks/code_plan_quota.py tests/proxy_unit_tests/test_code_plan_gateway.py tests/proxy_unit_tests/test_code_plan_plans.py tests/proxy_unit_tests/test_code_plan_credit_rules.py tests/proxy_unit_tests/test_code_plan_credit_rules_api.py tests/proxy_unit_tests/test_code_plan_subscriptions.py tests/proxy_unit_tests/test_code_plan_subscriptions_api.py tests/proxy_unit_tests/test_code_plan_quotas.py tests/proxy_unit_tests/test_code_plan_notion_regressions.py tests/proxy_unit_tests/code_plan_api_test_utils.py
 
       - name: Validate proxy Prisma schema
         run: .venv/bin/prisma validate --schema litellm/proxy/schema.prisma
