@@ -108,13 +108,22 @@ class UsageLedgerService:
         end_time: datetime | None = None,
         limit: int = 100,
     ) -> list[UsageLedgerAggregateRecord]:
+        aggregate_event_type: str | list[str]
+        if event_type:
+            aggregate_event_type = event_type.value
+        else:
+            aggregate_event_type = [
+                UsageLedgerEventType.SETTLE.value,
+                UsageLedgerEventType.MANUAL_ADJUST.value,
+            ]
+
         return await self.repository.aggregate(
             group_by=group_by,
             subscription_id=subscription_id,
             project_id=project_id,
             user_id=user_id,
             model=model,
-            event_type=event_type.value if event_type else None,
+            event_type=aggregate_event_type,
             start_time=start_time,
             end_time=end_time,
             limit=limit,

@@ -6,6 +6,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
+from litellm._logging import verbose_proxy_logger
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
@@ -574,6 +575,12 @@ class QuotaService:
         try:
             await self.ledger_writer.record_quota_event(decision=decision, request=request, usage=usage)
         except (RuntimeError, TypeError, ValueError):
+            verbose_proxy_logger.exception(
+                "Code Plan usage ledger write failed: request_id=%s event_type=%s subscription_id=%s",
+                decision.request_id,
+                decision.event_type.value,
+                decision.subscription_id,
+            )
             return
 
     def _settlement_credits(self, request: QuotaSettlementRequest) -> float:

@@ -72,7 +72,7 @@ class UsageLedgerRepository:
         project_id: str | None = None,
         user_id: str | None = None,
         model: str | None = None,
-        event_type: str | None = None,
+        event_type: str | list[str] | None = None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         limit: int = 100,
@@ -174,7 +174,14 @@ class UsageLedgerRepository:
         }
         for filter_name, column_name in column_map.items():
             value = filters.get(filter_name)
-            if value:
+            if isinstance(value, list):
+                if value:
+                    placeholders = []
+                    for item in value:
+                        arguments.append(item)
+                        placeholders.append(f"${len(arguments)}")
+                    clauses.append(f'"{column_name}" IN ({", ".join(placeholders)})')
+            elif value:
                 arguments.append(value)
                 clauses.append(f'"{column_name}" = ${len(arguments)}')
         if filters.get("start_time") is not None:

@@ -12,6 +12,7 @@ from litellm.product.quotas.models import (
 )
 from litellm.product.usage_ledger.models import (
     UsageLedgerEventType,
+    UsageLedgerGroupBy,
     UsageLedgerManualAdjustRequest,
     UsageLedgerRecord,
 )
@@ -22,6 +23,7 @@ class _UsageLedgerRepository:
     def __init__(self):
         self.created = []
         self.window_updates = []
+        self.aggregates = []
 
     async def create(self, data):
         self.created.append(data)
@@ -33,6 +35,10 @@ class _UsageLedgerRepository:
 
     async def update_subscription_windows(self, **kwargs):
         self.window_updates.append(kwargs)
+
+    async def aggregate(self, **kwargs):
+        self.aggregates.append(kwargs)
+        return []
 
 
 def _window(name: str, anchor: int, seconds: int) -> QuotaWindow:
@@ -119,3 +125,29 @@ async def test_usage_ledger_manual_adjust_creates_manual_adjust_event():
     assert record.credits == 25
     assert record.rule_version == 3
     assert record.metadata == {"reason": "support credit"}
+
+
+@pytest.mark.asyncio
+async def test_usage_ledger_summary_defaults_to_billable_event_types():
+    repository = _UsageLedgerRepository()
+    service = UsageLedgerService(repository)
+
+    await service.aggregate_events(group_by=UsageLedgerGroupBy.DAY)
+
+    assert repository.aggregates[0]["event_type"] == [
+        UsageLedgerEventType.SETTLE.value,
+        UsageLedgerEventType.MANUAL_ADJUST.value,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_usage_ledger_summary_respects_explicit_event_type():
+    repository = _UsageLedgerRepository()
+    service = UsageLedgerService(repository)
+
+    await service.aggregate_events(
+        group_by=UsageLedgerGroupBy.DAY,
+        event_type=UsageLedgerEventType.RESERVE,
+    )
+
+    assert repository.aggregates[0]["event_type"] == UsageLedgerEventType.RESERVE.value

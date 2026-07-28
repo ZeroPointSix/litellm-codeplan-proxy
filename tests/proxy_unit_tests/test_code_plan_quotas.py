@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+import litellm.product.quotas.service as quota_service_module
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
@@ -86,6 +87,19 @@ class _LedgerWriter:
 
     async def record_quota_event(self, *, decision, request, usage):
         self.events.append({"decision": decision, "request": request, "usage": usage})
+
+
+class _FailingLedgerWriter:
+    async def record_quota_event(self, *, decision, request, usage):
+        raise RuntimeError("ledger unavailable")
+
+
+class _Logger:
+    def __init__(self):
+        self.exceptions = []
+
+    def exception(self, *args, **kwargs):
+        self.exceptions.append({"args": args, "kwargs": kwargs})
 
 
 def _code_plan_metadata(**overrides):
@@ -310,6 +324,28 @@ async def test_quota_service_records_ledger_events_with_request_context():
     assert writer.events[1]["usage"] == CreditUsage(input_tokens=10, output_tokens=2)
     assert writer.events[1]["request"].user_id == "user-ledger"
     assert writer.events[1]["request"].api_key_id == "key-ledger"
+
+
+@pytest.mark.asyncio
+async def test_quota_service_logs_ledger_write_failure(monkeypatch):
+    logger = _Logger()
+    monkeypatch.setattr(quota_service_module, "verbose_proxy_logger", logger)
+    service = QuotaService(InMemoryQuotaStore(), ledger_writer=_FailingLedgerWriter())
+
+    decision = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-ledger-fails",
+            subscription_id="sub-ledger-fails",
+            input_usage=CreditUsage(input_tokens=1),
+            multipliers=CreditMultipliers(),
+            windows=_windows(),
+            default_max_output_tokens=1,
+        )
+    )
+
+    assert decision.allowed is True
+    assert logger.exceptions
+    assert "Code Plan usage ledger write failed" in logger.exceptions[0]["args"][0]
 
 
 @pytest.mark.asyncio
