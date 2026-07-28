@@ -28,7 +28,6 @@ from litellm.product.subscriptions.service import SubscriptionService
 from litellm.proxy._types import LiteLLMRoutes, UserAPIKeyAuth
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 
-
 PORTAL_SELF_MANAGED_ROUTES = [
     "/v1/me/subscription",
     "/v1/me/quota",
