@@ -163,7 +163,7 @@ def _install_spend_log_seed_route(app: FastAPI) -> None:
                     status,
                     cache_hit
                 )
-                VALUES ($1, 'completion', $2, 99.0, 15, 10, 5, $3, $4, 125.0, 'gpt-4o-mini',
+                VALUES ($1, 'completion', $2, 99.0, 15, 10, 5, $3::timestamptz, $4::timestamptz, 125.0, 'gpt-4o-mini',
                         'https://api.test', $5::jsonb, $6, 'success', 'false')""",
             seed.request_id,
             seed.api_key,
