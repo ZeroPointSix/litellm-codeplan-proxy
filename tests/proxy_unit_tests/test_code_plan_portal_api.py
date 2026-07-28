@@ -284,7 +284,7 @@ def test_portal_api_flow(portal_client: tuple[TestClient, AuthState]) -> None:
 
     subscription_resp = client.get("/v1/me/subscription")
     assert subscription_resp.status_code == 200, subscription_resp.text
-    portal_subscription = subscription_resp.json()
+    portal_subscription = subscription_resp.json()["subscription"]
     assert portal_subscription["subscription_id"] == subscription["subscription_id"]
     assert portal_subscription["project_id"] == project_id
     assert portal_subscription["key_count"] == 1
