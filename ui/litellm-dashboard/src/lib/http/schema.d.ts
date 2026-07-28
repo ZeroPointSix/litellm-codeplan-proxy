@@ -15327,6 +15327,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/usage-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Usage Ledger */
+        get: operations["list_usage_ledger_v1_admin_usage_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/usage-ledger/manual-adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manual Adjust Usage Ledger */
+        post: operations["manual_adjust_usage_ledger_v1_admin_usage_ledger_manual_adjust_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/usage-ledger/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summarize Usage Ledger */
+        get: operations["summarize_usage_ledger_v1_admin_usage_ledger_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -31537,6 +31588,10 @@ export interface components {
             updated_by?: string | null;
             /** Version */
             version: number;
+            /** Window 5H Start */
+            window_5h_start?: string | null;
+            /** Window Week Start */
+            window_week_start?: string | null;
         };
         /** SubscriptionRenewRequest */
         SubscriptionRenewRequest: {
@@ -33372,6 +33427,184 @@ export interface components {
             trend: string;
             /** Type */
             type: string;
+        };
+        /** UsageLedgerAggregateRecord */
+        UsageLedgerAggregateRecord: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
+             * Credits
+             * @default 0
+             */
+            credits: number;
+            /**
+             * Event Count
+             * @default 0
+             */
+            event_count: number;
+            /** Group */
+            group: string;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Request Count
+             * @default 0
+             */
+            request_count: number;
+        };
+        /** UsageLedgerAggregateResponse */
+        UsageLedgerAggregateResponse: {
+            /** Data */
+            data: components["schemas"]["UsageLedgerAggregateRecord"][];
+            group_by: components["schemas"]["UsageLedgerGroupBy"];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /**
+         * UsageLedgerEventType
+         * @enum {string}
+         */
+        UsageLedgerEventType: "reserve" | "settle" | "release" | "refund" | "manual_adjust" | "compensate" | "expire" | "pending_usage";
+        /**
+         * UsageLedgerGroupBy
+         * @enum {string}
+         */
+        UsageLedgerGroupBy: "hour" | "day" | "model" | "user";
+        /** UsageLedgerListResponse */
+        UsageLedgerListResponse: {
+            /** Data */
+            data: components["schemas"]["UsageLedgerRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** UsageLedgerManualAdjustRequest */
+        UsageLedgerManualAdjustRequest: {
+            /** Credits */
+            credits: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Rule Version
+             * @default 1
+             */
+            rule_version: number;
+            /** Subscription Id */
+            subscription_id: string;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** UsageLedgerRecord */
+        UsageLedgerRecord: {
+            /** Api Key Id */
+            api_key_id?: string | null;
+            /**
+             * Cache Read Multiplier
+             * @default 0
+             */
+            cache_read_multiplier: number;
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Multiplier
+             * @default 0
+             */
+            cache_write_multiplier: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Credits */
+            credits: number;
+            /** Event Id */
+            event_id: string;
+            event_type: components["schemas"]["UsageLedgerEventType"];
+            /**
+             * Input Multiplier
+             * @default 1
+             */
+            input_multiplier: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /**
+             * Output Multiplier
+             * @default 1
+             */
+            output_multiplier: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /** Project Id */
+            project_id?: string | null;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Rule Version
+             * @default 1
+             */
+            rule_version: number;
+            /** Subscription Id */
+            subscription_id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Window 5H End */
+            window_5h_end?: string | null;
+            /** Window 5H Period Id */
+            window_5h_period_id?: string | null;
+            /** Window 5H Start */
+            window_5h_start?: string | null;
+            /** Window Week End */
+            window_week_end?: string | null;
+            /** Window Week Period Id */
+            window_week_period_id?: string | null;
+            /** Window Week Start */
+            window_week_start?: string | null;
         };
         /** UsageLogEntry */
         UsageLogEntry: {
@@ -53517,6 +53750,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_usage_ledger_v1_admin_usage_ledger_get: {
+        parameters: {
+            query?: {
+                subscription_id?: string | null;
+                project_id?: string | null;
+                user_id?: string | null;
+                model?: string | null;
+                event_type?: components["schemas"]["UsageLedgerEventType"] | null;
+                start_time?: string | null;
+                end_time?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manual_adjust_usage_ledger_v1_admin_usage_ledger_manual_adjust_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageLedgerManualAdjustRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_usage_ledger_v1_admin_usage_ledger_summary_get: {
+        parameters: {
+            query?: {
+                group_by?: components["schemas"]["UsageLedgerGroupBy"];
+                subscription_id?: string | null;
+                project_id?: string | null;
+                user_id?: string | null;
+                model?: string | null;
+                event_type?: components["schemas"]["UsageLedgerEventType"] | null;
+                start_time?: string | null;
+                end_time?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerAggregateResponse"];
                 };
             };
             /** @description Validation Error */

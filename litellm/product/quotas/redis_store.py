@@ -261,6 +261,7 @@ class RedisQuotaStore:
             decision.metadata = {
                 **decision.metadata,
                 "windows": [window.model_dump() for window in windows],
+                "settlement_request": request.model_dump(mode="json"),
             }
             if request.event_type == QuotaEventType.SETTLE and settled_credits > 0 and request.anchor_first_success:
                 await self._persist_5h_anchor(request.subscription_id, windows)
@@ -292,12 +293,18 @@ class RedisQuotaStore:
                         project_id=reservation.get("project_id")
                         if isinstance(reservation.get("project_id"), str)
                         else None,
+                        user_id=reservation.get("user_id") if isinstance(reservation.get("user_id"), str) else None,
+                        api_key_id=reservation.get("api_key_id")
+                        if isinstance(reservation.get("api_key_id"), str)
+                        else None,
+                        model=reservation.get("model") if isinstance(reservation.get("model"), str) else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
                         reserved_credits=reserved_credits,
                         event_type=QuotaEventType.EXPIRED,
                         anchor_first_success=False,
+                        rule_version=int(reservation.get("rule_version") or 1),
                     ),
                     reserved_credits,
                 )
@@ -321,12 +328,18 @@ class RedisQuotaStore:
                         project_id=reservation.get("project_id")
                         if isinstance(reservation.get("project_id"), str)
                         else None,
+                        user_id=reservation.get("user_id") if isinstance(reservation.get("user_id"), str) else None,
+                        api_key_id=reservation.get("api_key_id")
+                        if isinstance(reservation.get("api_key_id"), str)
+                        else None,
+                        model=reservation.get("model") if isinstance(reservation.get("model"), str) else None,
                         actual_usage=CreditUsage(),
                         multipliers=CreditMultipliers(),
                         windows=windows,
                         reserved_credits=reserved_credits,
                         event_type=QuotaEventType.COMPENSATED,
                         anchor_first_success=False,
+                        rule_version=int(reservation.get("rule_version") or 1),
                     ),
                     0.0,
                 )
@@ -406,6 +419,10 @@ class RedisQuotaStore:
                 "request_id": request.request_id,
                 "subscription_id": request.subscription_id,
                 "project_id": request.project_id,
+                "user_id": request.user_id,
+                "api_key_id": request.api_key_id,
+                "model": request.model,
+                "rule_version": request.rule_version,
                 "reserved_credits": reserved_credits,
                 "state": ReservationState.RESERVED.value,
                 "windows": [window.model_dump() for window in request.windows],

@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from litellm.product.credit_rules.router import router as credit_rule_router
 from litellm.product.plans.router import router as plan_router
 from litellm.product.subscriptions.router import router as subscription_router
+from litellm.product.usage_ledger.router import router as usage_ledger_router
 from litellm.proxy import proxy_server
 from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
 from litellm.proxy.auth import user_api_key_auth as auth_module
@@ -52,5 +53,6 @@ def build_code_plan_test_app() -> FastAPI:
     app.include_router(credit_rule_router)
     app.include_router(plan_router)
     app.include_router(subscription_router)
+    app.include_router(usage_ledger_router)
     app.dependency_overrides[auth_module.user_api_key_auth] = fake_admin_auth
     return app

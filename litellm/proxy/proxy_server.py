@@ -360,6 +360,7 @@ from litellm.proxy.management_endpoints.budget_management_endpoints import (
 from litellm.product.credit_rules.router import router as credit_rule_router
 from litellm.product.plans.router import router as code_plan_router
 from litellm.product.subscriptions.router import router as code_plan_subscription_router
+from litellm.product.usage_ledger.router import router as code_plan_usage_ledger_router
 from litellm.proxy.management_endpoints.cache_settings_endpoints import (
     router as cache_settings_router,
 )
@@ -15993,6 +15994,7 @@ app.include_router(model_management_router)
 app.include_router(credit_rule_router)
 app.include_router(code_plan_router)
 app.include_router(code_plan_subscription_router)
+app.include_router(code_plan_usage_ledger_router)
 app.include_router(model_access_group_management_router)
 app.include_router(tag_management_router)
 app.include_router(workflow_management_router)

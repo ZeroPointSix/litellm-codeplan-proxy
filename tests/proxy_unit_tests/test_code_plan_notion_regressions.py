@@ -83,6 +83,7 @@ def test_caller_metadata_cannot_inject_code_plan_anchor():
 class _Subscription:
     def __init__(self, metadata):
         self.metadata = metadata
+        self.window_5h_start = None
 
 
 def test_only_subscription_metadata_can_preserve_existing_5h_anchor():

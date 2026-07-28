@@ -126,6 +126,8 @@ class SubscriptionRecord(BaseModel):
     renewed_at: datetime | None = None
     paused_at: datetime | None = None
     canceled_at: datetime | None = None
+    window_5h_start: datetime | None = None
+    window_week_start: datetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     version: int = Field(ge=1)
     created_at: datetime | None = None
