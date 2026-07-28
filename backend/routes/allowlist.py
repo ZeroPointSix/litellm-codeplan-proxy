@@ -56,7 +56,11 @@ BACKEND_PATH_PREFIXES: tuple[str, ...] = (
     "/v1/admin/plans/",
     "/v1/admin/credit-rules/",
     "/v1/admin/subscriptions/",
+<<<<<<< HEAD
+    "/v1/me/",
+=======
     "/v1/admin/usage-ledger/",
+>>>>>>> origin/litellm_internal_staging
     # Tools / agents (registry & policy admin)
     "/v1/tool/",
     "/v1/agents",

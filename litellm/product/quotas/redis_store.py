@@ -234,6 +234,19 @@ class RedisQuotaStore:
             return windows
         return apply_persisted_5h_anchor(windows, anchor)
 
+    async def get_window_spent(self, subscription_id: str, windows: list[QuotaWindow]) -> dict[str, float]:
+        keys = [self._spent_key(subscription_id, window.name, window.period_id) for window in windows]
+        if not keys:
+            return {}
+        values = await self.redis_client.mget(keys)
+        spent: dict[str, float] = {}
+        for window, value in zip(windows, values):
+            try:
+                spent[window.name] = float(value or 0)
+            except (TypeError, ValueError):
+                spent[window.name] = 0.0
+        return spent
+
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
         keys = self._keys(request.subscription_id, request.request_id, QuotaEventType.RESERVE, request.windows)
         args = self._reserve_args(request, reserved_credits)

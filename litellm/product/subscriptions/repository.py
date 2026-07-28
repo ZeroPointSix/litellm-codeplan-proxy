@@ -72,6 +72,47 @@ class SubscriptionRepository:
         records = await self.table.find_many(where=where, order={"created_at": "desc"})
         return [self._to_model(record) for record in records]
 
+    async def get_current_for_scope(
+        self,
+        project_ids: list[str] | None = None,
+        litellm_team_id: str | None = None,
+    ) -> SubscriptionRecord | None:
+        scope_filters = self._scope_filters(project_ids, litellm_team_id)
+        if not scope_filters:
+            return None
+
+        records = await self.table.find_many(
+            where=self._where_with_scope({"status": "active"}, scope_filters),
+            order={"created_at": "desc"},
+            take=1,
+        )
+        if not records:
+            return None
+        return self._to_model(records[0])
+
+    def _scope_filters(
+        self,
+        project_ids: list[str] | None,
+        litellm_team_id: str | None,
+    ) -> list[dict[str, Any]]:
+        filters: list[dict[str, Any]] = []
+        normalized_project_ids = list(
+            dict.fromkeys(project_id.strip() for project_id in project_ids or [] if project_id and project_id.strip())
+        )
+        if normalized_project_ids:
+            filters.append({"project_id": {"in": normalized_project_ids}})
+        if litellm_team_id:
+            filters.append({"litellm_team_id": litellm_team_id})
+        return filters
+
+    def _where_with_scope(self, base: dict[str, Any], filters: list[dict[str, Any]]) -> dict[str, Any]:
+        where = dict(base)
+        if len(filters) == 1:
+            where.update(filters[0])
+        else:
+            where["OR"] = filters
+        return where
+
     async def update(self, subscription_id: str, data: dict[str, Any]) -> SubscriptionRecord:
         record = await self.table.update(where={"subscription_id": subscription_id}, data=self._serialize(data))
         return self._to_model(record)
