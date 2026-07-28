@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
 
 from litellm.product.me.models import PortalKeyRecord
 from litellm.product.subscriptions.models import SubscriptionRecord
 
 
 class PortalRepository:
-    def __init__(self, prisma_client):
+    def __init__(self, prisma_client: Any):
         self.prisma_client = prisma_client
         self.db = prisma_client.db
 
