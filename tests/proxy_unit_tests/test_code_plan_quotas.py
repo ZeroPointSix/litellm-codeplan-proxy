@@ -80,6 +80,14 @@ class _UserKey:
         self.parent_otel_span = None
 
 
+class _LedgerWriter:
+    def __init__(self):
+        self.events = []
+
+    async def record_quota_event(self, *, decision, request, usage):
+        self.events.append({"decision": decision, "request": request, "usage": usage})
+
+
 def _code_plan_metadata(**overrides):
     metadata = {
         "code_plan_subscription_id": "sub-1",
@@ -252,6 +260,110 @@ async def test_settle_is_idempotent_by_request_and_event_type():
     assert first.credits == 12
     assert second.idempotent is True
     assert _spent(store, "sub-1", "5h") == 12
+
+
+@pytest.mark.asyncio
+async def test_quota_service_records_ledger_events_with_request_context():
+    writer = _LedgerWriter()
+    service = QuotaService(InMemoryQuotaStore(), ledger_writer=writer)
+    multipliers = CreditMultipliers(input_multiplier=2, output_multiplier=3)
+    windows = _windows(now_epoch=1_770_000_000)
+
+    reserve = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-ledger",
+            subscription_id="sub-ledger",
+            project_id="project-ledger",
+            user_id="user-ledger",
+            api_key_id="key-ledger",
+            model="test-model",
+            input_usage=CreditUsage(input_tokens=10),
+            multipliers=multipliers,
+            windows=windows,
+            default_max_output_tokens=5,
+            rule_version=7,
+        )
+    )
+    await service.settle(
+        QuotaSettlementRequest(
+            request_id="req-ledger",
+            subscription_id="sub-ledger",
+            project_id="project-ledger",
+            user_id="user-ledger",
+            api_key_id="key-ledger",
+            model="test-model",
+            actual_usage=CreditUsage(input_tokens=10, output_tokens=2),
+            multipliers=multipliers,
+            windows=windows,
+            reserved_credits=reserve.credits,
+            rule_version=7,
+        )
+    )
+
+    assert [event["decision"].event_type for event in writer.events] == [
+        QuotaEventType.RESERVE,
+        QuotaEventType.SETTLE,
+    ]
+    assert writer.events[0]["usage"] == CreditUsage(input_tokens=10, output_tokens=5)
+    assert writer.events[0]["request"].rule_version == 7
+    assert writer.events[0]["request"].model == "test-model"
+    assert writer.events[1]["usage"] == CreditUsage(input_tokens=10, output_tokens=2)
+    assert writer.events[1]["request"].user_id == "user-ledger"
+    assert writer.events[1]["request"].api_key_id == "key-ledger"
+
+
+@pytest.mark.asyncio
+async def test_quota_service_records_automatic_expire_and_compensate_events():
+    writer = _LedgerWriter()
+    service = QuotaService(InMemoryQuotaStore(), ledger_writer=writer)
+    windows = _windows(now_epoch=1_770_000_000)
+    reserve = await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-expire-ledger",
+            subscription_id="sub-expire-ledger",
+            project_id="project-expire-ledger",
+            user_id="user-expire-ledger",
+            api_key_id="key-expire-ledger",
+            model="expire-model",
+            input_usage=CreditUsage(input_tokens=3),
+            multipliers=CreditMultipliers(),
+            windows=windows,
+            default_max_output_tokens=2,
+            rule_version=11,
+        )
+    )
+    await service.settle(
+        QuotaSettlementRequest(
+            request_id="req-expire-ledger",
+            subscription_id="sub-expire-ledger",
+            project_id="project-expire-ledger",
+            user_id="user-expire-ledger",
+            api_key_id="key-expire-ledger",
+            model="expire-model",
+            actual_usage=CreditUsage(),
+            multipliers=CreditMultipliers(),
+            windows=windows,
+            reserved_credits=reserve.credits,
+            event_type=QuotaEventType.PENDING_USAGE,
+            rule_version=11,
+        )
+    )
+    writer.events.clear()
+
+    expired = await service.expire_pending_usage(older_than_epoch=9_999_999_999)
+    compensated = await service.compensate_expired_usage()
+
+    assert len(expired) == 1
+    assert len(compensated) == 1
+    assert [event["decision"].event_type for event in writer.events] == [
+        QuotaEventType.EXPIRED,
+        QuotaEventType.COMPENSATED,
+    ]
+    assert writer.events[0]["request"].rule_version == 11
+    assert writer.events[0]["request"].model == "expire-model"
+    assert writer.events[0]["usage"] == CreditUsage()
+    assert writer.events[1]["request"].api_key_id == "key-expire-ledger"
+    assert writer.events[1]["usage"] == CreditUsage()
 
 
 @pytest.mark.asyncio

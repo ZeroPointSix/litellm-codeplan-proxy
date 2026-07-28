@@ -24,6 +24,8 @@ class SubscriptionRepository:
         "renewed_at": "::timestamp(3)",
         "paused_at": "::timestamp(3)",
         "canceled_at": "::timestamp(3)",
+        "window_5h_start": "::timestamp(3)",
+        "window_week_start": "::timestamp(3)",
     }
 
     def __init__(self, prisma_client: Any):
