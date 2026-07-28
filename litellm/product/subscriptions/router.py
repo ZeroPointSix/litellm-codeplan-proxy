@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from litellm.product.credit_rules.repository import CreditRuleRepository
+from litellm.product.me.router import router as code_plan_me_router
 from litellm.product.plans.repository import PlanRepository
 from litellm.product.subscriptions.litellm_client import ProxySubscriptionLiteLLMClient
 from litellm.product.subscriptions.models import (
@@ -44,7 +45,8 @@ def _register_management_routes() -> None:
 
 _register_management_routes()
 
-router = APIRouter(prefix="/v1/admin/subscriptions", tags=["Code Plan Subscription"])
+router = APIRouter()
+admin_router = APIRouter(prefix="/v1/admin/subscriptions", tags=["Code Plan Subscription"])
 
 AdminUser = Annotated[UserAPIKeyAuth, Depends(user_api_key_auth)]
 StatusFilter = Annotated[SubscriptionStatus | None, Query(alias="status")]
@@ -72,7 +74,7 @@ def _get_service() -> SubscriptionService:
     )
 
 
-@router.post("", response_model=SubscriptionProvisionResponse)
+@admin_router.post("", response_model=SubscriptionProvisionResponse)
 async def create_subscription(
     data: SubscriptionCreateRequest,
     user_api_key_dict: AdminUser,
@@ -81,7 +83,7 @@ async def create_subscription(
     return await _get_service().create_subscription(data, actor=user_api_key_dict)
 
 
-@router.get("", response_model=SubscriptionListResponse)
+@admin_router.get("", response_model=SubscriptionListResponse)
 async def list_subscriptions(
     user_api_key_dict: AdminUser,
     status_filter: StatusFilter = None,
@@ -97,7 +99,7 @@ async def list_subscriptions(
     return SubscriptionListResponse(data=subscriptions)
 
 
-@router.get("/{subscription_id}", response_model=SubscriptionRecord)
+@admin_router.get("/{subscription_id}", response_model=SubscriptionRecord)
 async def get_subscription(
     subscription_id: str,
     user_api_key_dict: AdminUser,
@@ -106,7 +108,7 @@ async def get_subscription(
     return await _get_service().get_subscription(subscription_id)
 
 
-@router.post("/{subscription_id}/renew", response_model=SubscriptionProvisionResponse)
+@admin_router.post("/{subscription_id}/renew", response_model=SubscriptionProvisionResponse)
 async def renew_subscription(
     subscription_id: str,
     data: SubscriptionRenewRequest,
@@ -116,7 +118,7 @@ async def renew_subscription(
     return await _get_service().renew_subscription(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/pause", response_model=SubscriptionRecord)
+@admin_router.post("/{subscription_id}/pause", response_model=SubscriptionRecord)
 async def pause_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
@@ -126,7 +128,7 @@ async def pause_subscription(
     return await _get_service().pause_subscription(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/cancel", response_model=SubscriptionRecord)
+@admin_router.post("/{subscription_id}/cancel", response_model=SubscriptionRecord)
 async def cancel_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
@@ -136,7 +138,7 @@ async def cancel_subscription(
     return await _get_service().cancel_subscription(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/expire", response_model=SubscriptionRecord)
+@admin_router.post("/{subscription_id}/expire", response_model=SubscriptionRecord)
 async def expire_subscription(
     subscription_id: str,
     data: SubscriptionActionRequest,
@@ -146,7 +148,7 @@ async def expire_subscription(
     return await _get_service().expire_subscription(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/upgrade", response_model=SubscriptionProvisionResponse)
+@admin_router.post("/{subscription_id}/upgrade", response_model=SubscriptionProvisionResponse)
 async def upgrade_subscription(
     subscription_id: str,
     data: SubscriptionUpgradeRequest,
@@ -156,7 +158,7 @@ async def upgrade_subscription(
     return await _get_service().upgrade_subscription(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/keys", response_model=SubscriptionProvisionResponse)
+@admin_router.post("/{subscription_id}/keys", response_model=SubscriptionProvisionResponse)
 async def issue_subscription_key(
     subscription_id: str,
     data: SubscriptionIssueKeyRequest,
@@ -166,7 +168,7 @@ async def issue_subscription_key(
     return await _get_service().issue_key(subscription_id, data, actor=user_api_key_dict)
 
 
-@router.post("/{subscription_id}/keys/revoke", response_model=SubscriptionRecord)
+@admin_router.post("/{subscription_id}/keys/revoke", response_model=SubscriptionRecord)
 async def revoke_subscription_key(
     subscription_id: str,
     data: SubscriptionRevokeKeyRequest,
@@ -174,3 +176,7 @@ async def revoke_subscription_key(
 ):
     _require_proxy_admin(user_api_key_dict)
     return await _get_service().revoke_key(subscription_id, data, actor=user_api_key_dict)
+
+
+router.include_router(admin_router)
+router.include_router(code_plan_me_router)
