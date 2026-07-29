@@ -122,12 +122,7 @@ function makePayload(
 ): CodePlanCreditRuleCreateRequest {
   const rowList = rows(editRows);
   for (const row of rowList) {
-    const values = [
-      row.input_multiplier,
-      row.output_multiplier,
-      row.cache_read_multiplier,
-      row.cache_write_multiplier,
-    ];
+    const values = [row.input_multiplier, row.output_multiplier, row.cache_read_multiplier, row.cache_write_multiplier];
     if (values.some((value) => value < 0 || !Number.isFinite(value))) {
       throw new Error("倍率必须是大于等于 0 的数字");
     }
