@@ -44,6 +44,13 @@ describe("plan_form_utils", () => {
     expect(createPlanPayloadFromValues(baseValues)).toEqual(expectedCreatePayload);
   });
 
+  it("allows draft plan payloads without allowed models", () => {
+    const values = { ...baseValues, allowed_models: [] };
+
+    expect(createPlanPayloadFromValues(values).allowed_models).toEqual([]);
+    expect(patchPlanPayloadFromValues(values, 7).allowed_models).toEqual([]);
+  });
+
   it("adds the optimistic lock version to edit payloads", () => {
     expect(patchPlanPayloadFromValues(baseValues, 7)).toMatchObject({
       version: 7,

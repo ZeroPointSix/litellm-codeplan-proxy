@@ -668,11 +668,7 @@ function CodePlanPlansManager({ accessToken }: { accessToken?: string | null }) 
                 />
               </Form.Item>
             </div>
-            <Form.Item
-              name="allowed_models"
-              label="allowed_models"
-              rules={[{ required: true, type: "array", min: 1, message: "至少选择一个模型后才能激活" }]}
-            >
+            <Form.Item name="allowed_models" label="allowed_models">
               <Select
                 mode="multiple"
                 showSearch
