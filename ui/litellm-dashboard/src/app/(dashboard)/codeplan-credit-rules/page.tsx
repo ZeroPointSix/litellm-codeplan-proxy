@@ -12,7 +12,13 @@ import {
   listCodePlanPlans,
   updateCodePlanCreditRule,
 } from "@/components/codeplan/codeplan_networking";
-import type { CodePlanCreditRule, CodePlanCreditRuleCreateRequest, CodePlanCreditRulePatchRequest, CodePlanPlan, CreditRuleStatus } from "@/components/codeplan/types";
+import type {
+  CodePlanCreditRule,
+  CodePlanCreditRuleCreateRequest,
+  CodePlanCreditRulePatchRequest,
+  CodePlanPlan,
+  CreditRuleStatus,
+} from "@/components/codeplan/types";
 import { isProxyAdminRole } from "@/utils/roles";
 import { Alert, Button, Card, Empty, Tag, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,73 +26,175 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 const { Text, Title } = Typography;
 const KEY = "model_multipliers";
 const STAR = "*";
+const multiplierKeys = [
+  "input_multiplier",
+  "output_multiplier",
+  "cache_read_multiplier",
+  "cache_write_multiplier",
+] as const;
+
 type Status = CreditRuleStatus | "all";
 type RowState = "added" | "deleted" | "modified" | "unchanged";
-type Row = { model_name: string; input_multiplier: number; output_multiplier: number; cache_read_multiplier: number; cache_write_multiplier: number };
+type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number };
+type Row = {
+  model_name: string;
+  input_multiplier: number;
+  output_multiplier: number;
+  cache_read_multiplier: number;
+  cache_write_multiplier: number;
+};
 type Diff = { model_name: string; before?: Row; after?: Row; state: RowState };
 
-const num = (v: unknown, d = 1) => (Number.isFinite(Number(v)) ? Number(v) : d);
-const show = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(6).replace(/0+$/, "").replace(/\.$/, ""));
-const clean = (r: Partial<Row>): Row => ({
-  model_name: r.model_name?.trim() || STAR,
-  input_multiplier: num(r.input_multiplier),
-  output_multiplier: num(r.output_multiplier),
-  cache_read_multiplier: num(r.cache_read_multiplier),
-  cache_write_multiplier: num(r.cache_write_multiplier),
+const defaultUsage: Usage = { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0 };
+const statusColor: Record<CreditRuleStatus, string> = { draft: "blue", active: "green", archived: "default" };
+const diffColor: Record<RowState, string> = { added: "green", deleted: "red", modified: "gold", unchanged: "default" };
+const diffClass: Record<RowState, string> = {
+  added: "bg-emerald-50",
+  deleted: "bg-rose-50",
+  modified: "bg-amber-50",
+  unchanged: "",
+};
+
+const num = (value: unknown, fallback = 1) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+const show = (value: number) =>
+  Number.isInteger(value) ? String(value) : value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+const sortModelNames = (a: string, b: string) => {
+  if (a === STAR) return -1;
+  if (b === STAR) return 1;
+  return a.localeCompare(b);
+};
+const sortRows = (a: Row, b: Row) => sortModelNames(a.model_name, b.model_name);
+const clean = (row: Partial<Row>): Row => ({
+  model_name: row.model_name?.trim() || STAR,
+  input_multiplier: num(row.input_multiplier),
+  output_multiplier: num(row.output_multiplier),
+  cache_read_multiplier: num(row.cache_read_multiplier),
+  cache_write_multiplier: num(row.cache_write_multiplier),
 });
 const rows = (items: Partial<Row>[] = []) => {
-  const m = new Map<string, Row>();
+  const map = new Map<string, Row>();
   for (const item of items) {
     const row = clean(item);
-    m.set(row.model_name, row);
+    map.set(row.model_name, row);
   }
-  if (!m.has(STAR)) m.set(STAR, clean({ model_name: STAR }));
-  return [...m.values()].sort((a, b) => (a.model_name === STAR ? -1 : b.model_name === STAR ? 1 : a.model_name.localeCompare(b.model_name)));
+  if (!map.has(STAR)) map.set(STAR, clean({ model_name: STAR }));
+  return [...map.values()].sort(sortRows);
 };
 const rowsOf = (rule: CodePlanCreditRule): Row[] => {
-  const base = clean({ model_name: STAR, input_multiplier: rule.input_multiplier, output_multiplier: rule.output_multiplier, cache_read_multiplier: rule.cache_read_multiplier, cache_write_multiplier: rule.cache_write_multiplier });
+  const baseInput = {
+    model_name: STAR,
+    input_multiplier: rule.input_multiplier,
+    output_multiplier: rule.output_multiplier,
+    cache_read_multiplier: rule.cache_read_multiplier,
+    cache_write_multiplier: rule.cache_write_multiplier,
+  };
+  const base = clean(baseInput);
   const raw = rule.metadata?.[KEY];
-  return Array.isArray(raw) ? rows([base, ...raw.filter((x) => x && typeof x === "object").map((x) => x as Partial<Row>)]) : [base];
+  if (!Array.isArray(raw)) return [base];
+  const metadataRows = raw.filter((item) => item && typeof item === "object").map((item) => item as Partial<Row>);
+  return rows([base, ...metadataRows]);
 };
-const label = (r?: Row) => r ? `in ${show(r.input_multiplier)} / out ${show(r.output_multiplier)} / cache read ${show(r.cache_read_multiplier)} / cache write ${show(r.cache_write_multiplier)}` : "-";
-const calc = (r: Row | undefined, u: Usage) => r ? u.input * r.input_multiplier + u.output * r.output_multiplier + u.cacheRead * r.cache_read_multiplier + u.cacheWrite * r.cache_write_multiplier : 0;
-type Usage = { input: number; output: number; cacheRead: number; cacheWrite: number };
+const label = (row?: Row) =>
+  row
+    ? `in ${show(row.input_multiplier)} / out ${show(row.output_multiplier)} / cache read ${show(
+        row.cache_read_multiplier,
+      )} / cache write ${show(row.cache_write_multiplier)}`
+    : "-";
+const calc = (row: Row | undefined, usage: Usage) =>
+  row
+    ? usage.input * row.input_multiplier +
+      usage.output * row.output_multiplier +
+      usage.cacheRead * row.cache_read_multiplier +
+      usage.cacheWrite * row.cache_write_multiplier
+    : 0;
 
 function metadata(rule?: CodePlanCreditRule) {
-  const m = { ...(rule?.metadata ?? {}) };
-  delete m[KEY];
-  return m;
+  const value = { ...(rule?.metadata ?? {}) };
+  delete value[KEY];
+  return value;
 }
 
-function makePayload(name: string, description: string, editRows: Row[], metaText: string): CodePlanCreditRuleCreateRequest {
-  const rs = rows(editRows);
-  for (const r of rs) {
-    const vals = [r.input_multiplier, r.output_multiplier, r.cache_read_multiplier, r.cache_write_multiplier];
-    if (vals.some((v) => v < 0 || !Number.isFinite(v))) throw new Error("倍率必须是大于等于 0 的数字");
-    if (!vals.some((v) => v > 0)) throw new Error(`${r.model_name} 至少需要一个倍率大于 0`);
+function makePayload(
+  name: string,
+  description: string,
+  editRows: Row[],
+  metaText: string,
+): CodePlanCreditRuleCreateRequest {
+  const rowList = rows(editRows);
+  for (const row of rowList) {
+    const values = [
+      row.input_multiplier,
+      row.output_multiplier,
+      row.cache_read_multiplier,
+      row.cache_write_multiplier,
+    ];
+    if (values.some((value) => value < 0 || !Number.isFinite(value))) {
+      throw new Error("倍率必须是大于等于 0 的数字");
+    }
+    if (!values.some((value) => value > 0)) throw new Error(`${row.model_name} 至少需要一个倍率大于 0`);
   }
+
   const meta = metaText.trim() ? JSON.parse(metaText) : {};
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) throw new Error("metadata 必须是 JSON object");
-  const d = rs.find((r) => r.model_name === STAR) ?? rs[0];
-  return { name: name.trim(), description: description.trim() || null, input_multiplier: d.input_multiplier, output_multiplier: d.output_multiplier, cache_read_multiplier: d.cache_read_multiplier, cache_write_multiplier: d.cache_write_multiplier, metadata: { ...(meta as Record<string, unknown>), [KEY]: rs } };
+
+  const defaultRow = rowList.find((row) => row.model_name === STAR) ?? rowList[0];
+  return {
+    name: name.trim(),
+    description: description.trim() || null,
+    input_multiplier: defaultRow.input_multiplier,
+    output_multiplier: defaultRow.output_multiplier,
+    cache_read_multiplier: defaultRow.cache_read_multiplier,
+    cache_write_multiplier: defaultRow.cache_write_multiplier,
+    metadata: { ...(meta as Record<string, unknown>), [KEY]: rowList },
+  };
 }
 
 function pasteRows(text: string) {
-  return rows(text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line, i) => !(i === 0 && /^(model|model_name|模型)/i.test(line))).map((line) => {
-    const [model_name, input_multiplier, output_multiplier, cache_read_multiplier, cache_write_multiplier] = line.includes("\t") ? line.split("\t") : line.split(/[,\s]+/);
-    return { model_name, input_multiplier: num(input_multiplier), output_multiplier: num(output_multiplier), cache_read_multiplier: num(cache_read_multiplier), cache_write_multiplier: num(cache_write_multiplier ?? cache_read_multiplier) };
-  }));
+  return rows(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line, index) => !(index === 0 && /^(model|model_name|模型)/i.test(line)))
+      .map((line) => {
+        const parts = line.includes("\t") ? line.split("\t") : line.split(/[,\s]+/);
+        const [model_name, input_multiplier, output_multiplier, cache_read_multiplier, cache_write_multiplier] = parts;
+        return {
+          model_name,
+          input_multiplier: num(input_multiplier),
+          output_multiplier: num(output_multiplier),
+          cache_read_multiplier: num(cache_read_multiplier),
+          cache_write_multiplier: num(cache_write_multiplier ?? cache_read_multiplier),
+        };
+      }),
+  );
+}
+
+function diffState(before?: Row, after?: Row): RowState {
+  if (!before) return "added";
+  if (!after) return "deleted";
+  const beforeValues = [
+    before.input_multiplier,
+    before.output_multiplier,
+    before.cache_read_multiplier,
+    before.cache_write_multiplier,
+  ].join("|");
+  const afterValues = [
+    after.input_multiplier,
+    after.output_multiplier,
+    after.cache_read_multiplier,
+    after.cache_write_multiplier,
+  ].join("|");
+  return beforeValues === afterValues ? "unchanged" : "modified";
 }
 
 function diffRows(a: CodePlanCreditRule, b: CodePlanCreditRule): Diff[] {
-  const left = new Map(rowsOf(a).map((r) => [r.model_name, r]));
-  const right = new Map(rowsOf(b).map((r) => [r.model_name, r]));
-  return [...new Set([...left.keys(), ...right.keys()])].sort((x, y) => x === STAR ? -1 : y === STAR ? 1 : x.localeCompare(y)).map((model_name) => {
+  const left = new Map(rowsOf(a).map((row) => [row.model_name, row]));
+  const right = new Map(rowsOf(b).map((row) => [row.model_name, row]));
+  return [...new Set([...left.keys(), ...right.keys()])].sort(sortModelNames).map((model_name) => {
     const before = left.get(model_name);
     const after = right.get(model_name);
-    const sig = (r?: Row) => r ? [r.input_multiplier, r.output_multiplier, r.cache_read_multiplier, r.cache_write_multiplier].join("|") : "";
-    const state: RowState = !before ? "added" : !after ? "deleted" : sig(before) === sig(after) ? "unchanged" : "modified";
-    return { model_name, before, after, state };
+    return { model_name, before, after, state: diffState(before, after) };
   });
 }
 
@@ -107,17 +215,17 @@ export default function CodePlanCreditRules() {
   const [paste, setPaste] = useState("");
   const [previewId, setPreviewId] = useState("");
   const [previewModel, setPreviewModel] = useState(STAR);
-  const [usage, setUsage] = useState<Usage>({ input: 1000, output: 500, cacheRead: 0, cacheWrite: 0 });
+  const [usage, setUsage] = useState<Usage>(defaultUsage);
   const [diffId, setDiffId] = useState("");
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(1);
   const [diff, setDiff] = useState<Diff[]>([]);
 
   const modelOptions = useMemo(() => [STAR, ...models], [models]);
-  const ruleOptions = useMemo(() => rules.map((r) => r.credit_rule_id), [rules]);
-  const previewRule = rules.find((r) => r.credit_rule_id === previewId) ?? rules[0];
+  const ruleOptions = useMemo(() => rules.map((rule) => rule.credit_rule_id), [rules]);
+  const previewRule = rules.find((rule) => rule.credit_rule_id === previewId) ?? rules[0];
   const previewRows = previewRule ? rowsOf(previewRule) : [];
-  const previewRow = previewRows.find((r) => r.model_name === previewModel) ?? previewRows[0];
+  const previewRow = previewRows.find((row) => row.model_name === previewModel) ?? previewRows[0];
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -128,22 +236,38 @@ export default function CodePlanCreditRules() {
         listCodePlanAvailableModels(accessToken),
         listCodePlanPlans(accessToken, { status: "active" }),
       ]);
-      const next = ruleList.data ?? [];
+      const nextRules = ruleList.data ?? [];
       const nextRefs: Record<string, CodePlanPlan[]> = {};
-      for (const p of planList.data ?? []) if (p.credit_rule_id) nextRefs[p.credit_rule_id] = [...(nextRefs[p.credit_rule_id] ?? []), p];
-      setRules(next);
+      for (const plan of planList.data ?? []) {
+        if (plan.credit_rule_id) nextRefs[plan.credit_rule_id] = [...(nextRefs[plan.credit_rule_id] ?? []), plan];
+      }
+      const nextModels = [
+        ...new Set((modelList.data ?? []).map((model) => model.model_name || model.id).filter(Boolean)),
+      ].sort() as string[];
+
+      setRules(nextRules);
       setRefs(nextRefs);
-      setModels([...new Set((modelList.data ?? []).map((m) => m.model_name || m.id).filter((m): m is string => Boolean(m)))].sort());
-      if (!previewId && next[0]) setPreviewId(next[0].credit_rule_id);
-      if (!diffId && next[0]) { setDiffId(next[0].credit_rule_id); setFrom(Math.max(1, next[0].version - 1)); setTo(next[0].version); }
-    } catch (e) {
-      msg.error(formatCodePlanError(e));
+      setModels(nextModels);
+      if (!previewId && nextRules[0]) setPreviewId(nextRules[0].credit_rule_id);
+      if (!diffId && nextRules[0]) {
+        const previousVersion = Math.max(1, nextRules[0].version - 1);
+        setDiffId(nextRules[0].credit_rule_id);
+        setFrom(previousVersion);
+        setTo(nextRules[0].version);
+      }
+    } catch (error) {
+      msg.error(formatCodePlanError(error));
     } finally {
       setLoading(false);
     }
   }, [accessToken, diffId, msg, previewId, status]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const open = (rule?: CodePlanCreditRule) => {
     setEditing(rule ?? null);
@@ -153,67 +277,404 @@ export default function CodePlanCreditRules() {
     setMeta(JSON.stringify(metadata(rule), null, 2));
     setShowEditor(true);
   };
+
   const save = async () => {
     if (!accessToken) return;
     try {
       const body = makePayload(name, description, editRows, meta);
-      if (editing) await updateCodePlanCreditRule(accessToken, editing.credit_rule_id, { ...body, version: editing.version } as CodePlanCreditRulePatchRequest);
-      else await createCodePlanCreditRule(accessToken, body);
+      if (editing) {
+        const patchBody = { ...body, version: editing.version } as CodePlanCreditRulePatchRequest;
+        await updateCodePlanCreditRule(accessToken, editing.credit_rule_id, patchBody);
+      } else {
+        await createCodePlanCreditRule(accessToken, body);
+      }
       msg.success(editing ? "已保存为新版本" : "已创建规则");
       setShowEditor(false);
       await load();
-    } catch (e) { msg.error(e instanceof Error ? e.message : formatCodePlanError(e)); }
+    } catch (error) {
+      msg.error(error instanceof Error ? error.message : formatCodePlanError(error));
+    }
   };
+
   const action = async (rule: CodePlanCreditRule, kind: "activate" | "archive") => {
     const usingPlans = refs[rule.credit_rule_id] ?? [];
-    if (kind === "archive" && usingPlans.length) { window.alert(`不能归档：仍有 active Plan 引用\n${usingPlans.map((p) => `${p.name} (${p.plan_id})`).join("\n")}`); return; }
-    if (!window.confirm("该操作仅对新产生的 Usage 生效，不重算历史账本；已有 Usage 会继续保留当时冻结的倍率版本。")) return;
+    if (kind === "archive" && usingPlans.length) {
+      const planNames = usingPlans.map((plan) => `${plan.name} (${plan.plan_id})`).join("\n");
+      window.alert(`不能归档：仍有 active Plan 引用\n${planNames}`);
+      return;
+    }
+    const confirmed = window.confirm(
+      "该操作仅对新产生的 Usage 生效，不重算历史账本；已有 Usage 会继续保留当时冻结的倍率版本。",
+    );
+    if (!confirmed) {
+      return;
+    }
     try {
       if (kind === "activate") await activateCodePlanCreditRule(accessToken, rule.credit_rule_id, rule.version);
       else await archiveCodePlanCreditRule(accessToken, rule.credit_rule_id, rule.version);
       await load();
-    } catch (e) { msg.error(formatCodePlanError(e)); }
+    } catch (error) {
+      msg.error(formatCodePlanError(error));
+    }
   };
+
   const loadDiff = async (id = diffId, a = from, b = to) => {
     if (!accessToken || !id) return;
     try {
-      const [left, right] = await Promise.all([getCodePlanCreditRule(accessToken, id, a), getCodePlanCreditRule(accessToken, id, b)]);
+      const [left, right] = await Promise.all([
+        getCodePlanCreditRule(accessToken, id, a),
+        getCodePlanCreditRule(accessToken, id, b),
+      ]);
       setDiff(diffRows(left, right));
-    } catch (e) { msg.error(formatCodePlanError(e)); }
+    } catch (error) {
+      msg.error(formatCodePlanError(error));
+    }
   };
-  const setRow = (i: number, k: keyof Row, v: string | number) => setEditRows((rs) => rs.map((r, idx) => idx === i ? clean({ ...r, [k]: k === "model_name" ? String(v) : Number(v) }) : r));
 
-  if (!userRole || !isProxyAdminRole(userRole)) return <div className="mx-auto max-w-7xl p-6"><Title level={2}>计费规则</Title><Alert type="error" showIcon message="需要 Proxy Admin 权限" /></div>;
+  const setRow = (index: number, key: keyof Row, value: string | number) =>
+    setEditRows((currentRows) =>
+      currentRows.map((row, rowIndex) => {
+        const nextValue = key === "model_name" ? String(value) : Number(value);
+        return rowIndex === index ? clean({ ...row, [key]: nextValue }) : row;
+      }),
+    );
+
+  if (!userRole || !isProxyAdminRole(userRole)) {
+    return (
+      <div className="mx-auto max-w-7xl p-6">
+        <Title level={2}>计费规则</Title>
+        <Alert type="error" showIcon message="需要 Proxy Admin 权限" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 lg:p-6">
       {holder}
-      <div><Text type="secondary">Code Plan / 计费规则</Text><Title level={2} className="!mb-0">计费规则</Title><Text>管理 CreditRule 倍率表、预览计算和版本历史。</Text></div>
-      <Alert type="info" showIcon message="配置调整仅对新 Usage 生效，不重算历史账本；每条 Usage 会冻结当时的倍率版本。" />
+      <div>
+        <Text type="secondary">Code Plan / 计费规则</Text>
+        <Title level={2} className="!mb-0">
+          计费规则
+        </Title>
+        <Text>管理 CreditRule 倍率表、预览计算和版本历史。</Text>
+      </div>
+      <Alert
+        type="info"
+        showIcon
+        message="配置调整仅对新 Usage 生效，不重算历史账本；每条 Usage 会冻结当时的倍率版本。"
+      />
+
       <Card>
-        <div className="mb-3 flex flex-wrap items-center gap-2"><select className="rounded border px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value as Status)}><option value="all">全部</option><option value="draft">Draft</option><option value="active">Active</option><option value="archived">Archived</option></select><Button loading={loading} onClick={load}>刷新</Button><Button type="primary" onClick={() => open()}>新建规则</Button><Text type="secondary">共 {rules.length} 条</Text></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead><tr className="border-b text-slate-500"><th>规则</th><th>状态</th><th>版本</th><th>模型数</th><th>Plan 引用</th><th>默认倍率</th><th>更新时间</th><th>操作</th></tr></thead><tbody>{rules.map((r) => <tr key={`${r.credit_rule_id}:${r.version}`} className="border-b align-top"><td className="py-2"><Text strong>{r.name}</Text><br /><Text code>{r.credit_rule_id}</Text><br /><Text type="secondary">{r.description}</Text></td><td><Tag color={{ draft: "blue", active: "green", archived: "default" }[r.status]}>{r.status}</Tag></td><td>v{r.version}</td><td>{rowsOf(r).filter((x) => x.model_name !== STAR).length}</td><td><Tag color={(refs[r.credit_rule_id] ?? []).length ? "warning" : "default"}>{(refs[r.credit_rule_id] ?? []).length}</Tag></td><td>{label(rowsOf(r)[0])}</td><td>{r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}</td><td><Button size="small" disabled={r.status === "archived"} onClick={() => open(r)}>编辑</Button> <Button size="small" onClick={() => { const a = Math.max(1, r.version - 1); setDiffId(r.credit_rule_id); setFrom(a); setTo(r.version); void loadDiff(r.credit_rule_id, a, r.version); }}>diff</Button> {r.status === "draft" && <Button size="small" type="primary" onClick={() => action(r, "activate")}>激活</Button>} {r.status !== "archived" && <Button size="small" danger onClick={() => action(r, "archive")}>归档</Button>}</td></tr>)}</tbody></table>{!rules.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无计费规则" />}</div>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <select
+            className="rounded border px-2 py-1"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as Status)}
+          >
+            <option value="all">全部</option>
+            <option value="draft">Draft</option>
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+          </select>
+          <Button loading={loading} onClick={load}>
+            刷新
+          </Button>
+          <Button type="primary" onClick={() => open()}>
+            新建规则
+          </Button>
+          <Text type="secondary">共 {rules.length} 条</Text>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead>
+              <tr className="border-b text-slate-500">
+                <th>规则</th>
+                <th>状态</th>
+                <th>版本</th>
+                <th>模型数</th>
+                <th>Plan 引用</th>
+                <th>默认倍率</th>
+                <th>更新时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => {
+                const referencedPlans = refs[rule.credit_rule_id] ?? [];
+                const ruleRows = rowsOf(rule);
+                const previousVersion = Math.max(1, rule.version - 1);
+                return (
+                  <tr key={`${rule.credit_rule_id}:${rule.version}`} className="border-b align-top">
+                    <td className="py-2">
+                      <Text strong>{rule.name}</Text>
+                      <br />
+                      <Text code>{rule.credit_rule_id}</Text>
+                      <br />
+                      <Text type="secondary">{rule.description}</Text>
+                    </td>
+                    <td>
+                      <Tag color={statusColor[rule.status]}>{rule.status}</Tag>
+                    </td>
+                    <td>v{rule.version}</td>
+                    <td>{ruleRows.filter((row) => row.model_name !== STAR).length}</td>
+                    <td>
+                      <Tag color={referencedPlans.length ? "warning" : "default"}>{referencedPlans.length}</Tag>
+                    </td>
+                    <td>{label(ruleRows[0])}</td>
+                    <td>{rule.updated_at ? new Date(rule.updated_at).toLocaleString() : "-"}</td>
+                    <td>
+                      <Button size="small" disabled={rule.status === "archived"} onClick={() => open(rule)}>
+                        编辑
+                      </Button>{" "}
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setDiffId(rule.credit_rule_id);
+                          setFrom(previousVersion);
+                          setTo(rule.version);
+                          void loadDiff(rule.credit_rule_id, previousVersion, rule.version);
+                        }}
+                      >
+                        diff
+                      </Button>{" "}
+                      {rule.status === "draft" && (
+                        <Button size="small" type="primary" onClick={() => action(rule, "activate")}>
+                          激活
+                        </Button>
+                      )}{" "}
+                      {rule.status !== "archived" && (
+                        <Button size="small" danger onClick={() => action(rule, "archive")}>
+                          归档
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {!rules.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无计费规则" />}
+        </div>
       </Card>
 
-      {showEditor && <Card title={editing ? `编辑 ${editing.credit_rule_id}` : "新建 CreditRule"}>
-        <Alert className="mb-3" type="info" showIcon message="默认兼容行 (*) 同步到后端 multiplier 字段；模型行保存到 metadata.model_multipliers。" />
-        <div className="grid gap-3"><input className="rounded border px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder="规则名" /><textarea className="rounded border px-3 py-2" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="描述" />
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="text-slate-500"><th>模型</th><th>Input</th><th>Output</th><th>Cache read</th><th>Cache write</th><th /></tr></thead><tbody>{editRows.map((r, i) => <tr key={i}><td><input list="models" className="w-full rounded border px-2 py-1" value={r.model_name} onChange={(e) => setRow(i, "model_name", e.target.value)} /></td>{(["input_multiplier", "output_multiplier", "cache_read_multiplier", "cache_write_multiplier"] as const).map((k) => <td key={k}><input type="number" min={0} step={0.01} className="w-full rounded border px-2 py-1" value={r[k]} onChange={(e) => setRow(i, k, e.target.value)} /></td>)}<td><Button danger disabled={editRows.length <= 1} onClick={() => setEditRows((rs) => rs.filter((_, idx) => idx !== i))}>-</Button></td></tr>)}</tbody></table></div>
-          <datalist id="models">{modelOptions.map((m) => <option key={m} value={m} />)}</datalist>
-          <div><Button onClick={() => setEditRows((rs) => [...rs, clean({ model_name: "" })])}>添加模型行</Button></div>
-          <textarea className="rounded border px-3 py-2" rows={3} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="批量粘贴：model input output cache_read cache_write" /><Button disabled={!paste.trim()} onClick={() => { setEditRows((rs) => rows([...rs, ...pasteRows(paste)])); setPaste(""); }}>导入粘贴内容</Button>
-          <textarea className="rounded border px-3 py-2 font-mono text-xs" rows={5} value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="metadata JSON" />
-          <div className="flex justify-end gap-2"><Button onClick={() => setShowEditor(false)}>取消</Button><Button type="primary" onClick={save}>{editing ? "保存为新版本" : "创建"}</Button></div>
-        </div>
-      </Card>}
+      {showEditor && (
+        <Card title={editing ? `编辑 ${editing.credit_rule_id}` : "新建 CreditRule"}>
+          <Alert
+            className="mb-3"
+            type="info"
+            showIcon
+            message="默认兼容行 (*) 同步到后端 multiplier 字段；模型行保存到 metadata.model_multipliers。"
+          />
+          <div className="grid gap-3">
+            <input
+              className="rounded border px-3 py-2"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="规则名"
+            />
+            <textarea
+              className="rounded border px-3 py-2"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="描述"
+            />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead>
+                  <tr className="text-slate-500">
+                    <th>模型</th>
+                    <th>Input</th>
+                    <th>Output</th>
+                    <th>Cache read</th>
+                    <th>Cache write</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {editRows.map((row, index) => (
+                    <tr key={row.model_name || index}>
+                      <td>
+                        <input
+                          list="models"
+                          className="w-full rounded border px-2 py-1"
+                          value={row.model_name}
+                          onChange={(event) => setRow(index, "model_name", event.target.value)}
+                        />
+                      </td>
+                      {multiplierKeys.map((key) => (
+                        <td key={key}>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="w-full rounded border px-2 py-1"
+                            value={row[key]}
+                            onChange={(event) => setRow(index, key, event.target.value)}
+                          />
+                        </td>
+                      ))}
+                      <td>
+                        <Button
+                          danger
+                          disabled={editRows.length <= 1}
+                          onClick={() =>
+                            setEditRows((currentRows) => currentRows.filter((_, rowIndex) => rowIndex !== index))
+                          }
+                        >
+                          -
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <datalist id="models">
+              {modelOptions.map((model) => (
+                <option key={model} value={model} />
+              ))}
+            </datalist>
+            <div>
+              <Button onClick={() => setEditRows((currentRows) => [...currentRows, clean({ model_name: "" })])}>
+                添加模型行
+              </Button>
+            </div>
+            <textarea
+              className="rounded border px-3 py-2"
+              rows={3}
+              value={paste}
+              onChange={(event) => setPaste(event.target.value)}
+              placeholder="批量粘贴：model input output cache_read cache_write"
+            />
+            <Button
+              disabled={!paste.trim()}
+              onClick={() => {
+                setEditRows((currentRows) => rows([...currentRows, ...pasteRows(paste)]));
+                setPaste("");
+              }}
+            >
+              导入粘贴内容
+            </Button>
+            <textarea
+              className="rounded border px-3 py-2 font-mono text-xs"
+              rows={5}
+              value={meta}
+              onChange={(event) => setMeta(event.target.value)}
+              placeholder="metadata JSON"
+            />
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setShowEditor(false)}>取消</Button>
+              <Button type="primary" onClick={save}>
+                {editing ? "保存为新版本" : "创建"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card title="换算预览">
-          <div className="grid gap-3"><select className="rounded border px-2 py-1" value={previewRule?.credit_rule_id ?? ""} onChange={(e) => setPreviewId(e.target.value)}>{ruleOptions.map((id) => <option key={id}>{id}</option>)}</select><select className="rounded border px-2 py-1" value={previewModel} onChange={(e) => setPreviewModel(e.target.value)}>{modelOptions.map((m) => <option key={m}>{m}</option>)}</select><div className="grid grid-cols-2 gap-2">{(["input", "output", "cacheRead", "cacheWrite"] as const).map((k) => <input key={k} type="number" min={0} className="rounded border px-2 py-1" value={usage[k]} onChange={(e) => setUsage((u) => ({ ...u, [k]: num(e.target.value, 0) }))} placeholder={k} />)}</div><div className="rounded bg-slate-50 p-3"><Text type="secondary">公式：input_tokens x input_multiplier + output_tokens x output_multiplier + cache_read_tokens x cache_read_multiplier + cache_write_tokens x cache_write_multiplier</Text><div className="mt-2 text-2xl font-semibold">{show(calc(previewRow, usage))} credits</div><Text type="secondary">命中倍率：{label(previewRow)}</Text></div></div>
+          <div className="grid gap-3">
+            <select
+              className="rounded border px-2 py-1"
+              value={previewRule?.credit_rule_id ?? ""}
+              onChange={(event) => setPreviewId(event.target.value)}
+            >
+              {ruleOptions.map((id) => (
+                <option key={id}>{id}</option>
+              ))}
+            </select>
+            <select
+              className="rounded border px-2 py-1"
+              value={previewModel}
+              onChange={(event) => setPreviewModel(event.target.value)}
+            >
+              {modelOptions.map((model) => (
+                <option key={model}>{model}</option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              {(["input", "output", "cacheRead", "cacheWrite"] as const).map((key) => (
+                <input
+                  key={key}
+                  type="number"
+                  min={0}
+                  className="rounded border px-2 py-1"
+                  value={usage[key]}
+                  onChange={(event) =>
+                    setUsage((currentUsage) => ({ ...currentUsage, [key]: num(event.target.value, 0) }))
+                  }
+                  placeholder={key}
+                />
+              ))}
+            </div>
+            <div className="rounded bg-slate-50 p-3">
+              <Text type="secondary">
+                公式：input_tokens x input_multiplier + output_tokens x output_multiplier + cache_read_tokens x
+                cache_read_multiplier + cache_write_tokens x cache_write_multiplier
+              </Text>
+              <div className="mt-2 text-2xl font-semibold">{show(calc(previewRow, usage))} credits</div>
+              <Text type="secondary">命中倍率：{label(previewRow)}</Text>
+            </div>
+          </div>
         </Card>
         <Card title="版本历史 diff">
-          <div className="mb-3 grid gap-2 md:grid-cols-[1fr_90px_90px_auto]"><select className="rounded border px-2 py-1" value={diffId} onChange={(e) => setDiffId(e.target.value)}>{ruleOptions.map((id) => <option key={id}>{id}</option>)}</select><input type="number" min={1} className="rounded border px-2 py-1" value={from} onChange={(e) => setFrom(num(e.target.value, 1))} /><input type="number" min={1} className="rounded border px-2 py-1" value={to} onChange={(e) => setTo(num(e.target.value, 1))} /><Button onClick={() => loadDiff()}>对比</Button></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-slate-500"><th>模型</th><th>v{from}</th><th>v{to}</th><th>变化</th></tr></thead><tbody>{diff.map((d) => <tr key={d.model_name} className={{ added: "bg-emerald-50", deleted: "bg-rose-50", modified: "bg-amber-50", unchanged: "" }[d.state]}><td><Text code={d.model_name === STAR}>{d.model_name}</Text></td><td>{label(d.before)}</td><td>{label(d.after)}</td><td><Tag color={{ added: "green", deleted: "red", modified: "gold", unchanged: "default" }[d.state]}>{d.state}</Tag></td></tr>)}</tbody></table>{!diff.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择规则和版本后点击对比" />}</div>
+          <div className="mb-3 grid gap-2 md:grid-cols-[1fr_90px_90px_auto]">
+            <select
+              className="rounded border px-2 py-1"
+              value={diffId}
+              onChange={(event) => setDiffId(event.target.value)}
+            >
+              {ruleOptions.map((id) => (
+                <option key={id}>{id}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              className="rounded border px-2 py-1"
+              value={from}
+              onChange={(event) => setFrom(num(event.target.value, 1))}
+            />
+            <input
+              type="number"
+              min={1}
+              className="rounded border px-2 py-1"
+              value={to}
+              onChange={(event) => setTo(num(event.target.value, 1))}
+            />
+            <Button onClick={() => loadDiff()}>对比</Button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b text-slate-500">
+                  <th>模型</th>
+                  <th>v{from}</th>
+                  <th>v{to}</th>
+                  <th>变化</th>
+                </tr>
+              </thead>
+              <tbody>
+                {diff.map((item) => (
+                  <tr key={item.model_name} className={diffClass[item.state]}>
+                    <td>
+                      <Text code={item.model_name === STAR}>{item.model_name}</Text>
+                    </td>
+                    <td>{label(item.before)}</td>
+                    <td>{label(item.after)}</td>
+                    <td>
+                      <Tag color={diffColor[item.state]}>{item.state}</Tag>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!diff.length && (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择规则和版本后点击对比" />
+            )}
+          </div>
         </Card>
       </div>
     </div>
