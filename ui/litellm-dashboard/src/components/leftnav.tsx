@@ -69,6 +69,7 @@ import {
   internalUserRoles,
   isAdminRole,
   isUserTeamAdminForAnyTeam,
+  proxyAdminRoles,
   rolesAllowedToViewWriteScopedPages,
   rolesWithWriteAccess,
 } from "../utils/roles";
@@ -236,6 +237,40 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    groupLabel: "CODE PLAN",
+    roles: proxyAdminRoles,
+    items: [
+      {
+        key: "codeplan-plans",
+        page: "codeplan-plans",
+        label: "套餐管理",
+        icon: <Wallet {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-credit-rules",
+        page: "codeplan-credit-rules",
+        label: "计费规则",
+        icon: <ScrollText {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-subscriptions",
+        page: "codeplan-subscriptions",
+        label: "订阅管理",
+        icon: <Users {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-usage-ledger",
+        page: "codeplan-usage-ledger",
+        label: "用量账本",
+        icon: <Activity {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+    ],
+  },
+  {
     groupLabel: "DEVELOPER TOOLS",
     items: [
       { key: "api_ref", page: "api_ref", label: "API Reference", icon: <Code2 {...ICON} /> },
@@ -357,6 +392,7 @@ const SECTION_DISPLAY: Record<string, string> = {
   "AI GATEWAY": "AI Gateway",
   OBSERVABILITY: "Observability",
   "ACCESS CONTROL": "Access Control",
+  "CODE PLAN": "Code Plan",
   "DEVELOPER TOOLS": "Developer Tools",
   SETTINGS: "Settings",
 };
