@@ -26,6 +26,7 @@ export const CODEPLAN_ADMIN_ENDPOINTS = {
   usageLedger: "/v1/admin/usage-ledger",
   usageLedgerSummary: "/v1/admin/usage-ledger/summary",
   usageLedgerManualAdjust: "/v1/admin/usage-ledger/manual-adjust",
+  models: "/v1/models",
 } as const;
 
 type AccessToken = string | null | undefined;
@@ -56,6 +57,18 @@ export type CodePlanUsageLedgerQuery = QueryParams & {
 export type CodePlanUsageLedgerSummaryQuery = CodePlanUsageLedgerQuery & {
   group_by?: UsageLedgerGroupBy | null;
 };
+
+export interface CodePlanAvailableModel {
+  id?: string;
+  model_name?: string;
+  owned_by?: string;
+  object?: string;
+}
+
+export interface CodePlanAvailableModelListResponse {
+  object?: string;
+  data?: CodePlanAvailableModel[];
+}
 
 export interface CodePlanSubscriptionCreateRequest {
   project_id: string;
@@ -107,9 +120,12 @@ const itemPath = (basePath: string, id: string): string => `${basePath}/${encode
 
 const versionQuery = (version?: number): QueryParams | undefined => (version === undefined ? undefined : { version });
 
+export const isCodePlanVersionConflict = (error: unknown): boolean => error instanceof ApiError && error.status === 409;
+
 export const formatCodePlanError = (error: unknown): string => {
   if (error instanceof ApiError) {
     if (error.status === 403) return "需要 Proxy Admin 权限";
+    if (error.status === 409) return "版本已变化，请刷新后重试";
     if (error.status === 500) return "数据库未连接";
     return error.message || deriveErrorMessage(error.body);
   }
@@ -293,3 +309,6 @@ export const manualAdjustCodePlanUsageLedger = (
       body,
     },
   );
+
+export const listCodePlanAvailableModels = (accessToken: AccessToken) =>
+  codePlanClient.get<CodePlanAvailableModelListResponse>(CODEPLAN_ADMIN_ENDPOINTS.models, { accessToken });

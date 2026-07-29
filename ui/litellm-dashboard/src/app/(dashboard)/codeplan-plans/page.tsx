@@ -4,7 +4,7 @@ import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { CodePlanPlansPage } from "@/components/codeplan";
 
 export default function CodePlanPlans() {
-  const { userRole } = useAuthorized();
+  const { accessToken, userRole } = useAuthorized();
 
-  return <CodePlanPlansPage userRole={userRole} />;
+  return <CodePlanPlansPage accessToken={accessToken} userRole={userRole} />;
 }
