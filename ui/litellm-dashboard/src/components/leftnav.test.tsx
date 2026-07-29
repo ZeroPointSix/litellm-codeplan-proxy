@@ -3,11 +3,34 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "../../tests/test-utils";
 import Sidebar, { menuGroups, getBreadcrumb } from "./leftnav";
 
+interface MockOrganizationMember {
+  user_id: string;
+  user_role: string;
+}
+
+interface MockOrganization {
+  organization_id: string;
+  organization_name: string;
+  spend: number;
+  max_budget: number | null;
+  models: string[];
+  tpm_limit: number | null;
+  rpm_limit: number | null;
+  members: MockOrganizationMember[];
+}
+
+interface MockOrganizationsResult {
+  data: MockOrganization[];
+  isLoading: boolean;
+  error: unknown;
+}
+
 vi.mock("../utils/roles", () => {
   return {
     all_admin_roles: ["admin", "admin_viewer"],
     internalUserRoles: ["internal"],
     rolesWithWriteAccess: ["admin", "internal"],
+    proxyAdminRoles: ["admin"],
     rolesAllowedToViewWriteScopedPages: ["admin", "internal", "admin_viewer"],
     isAdminRole: (role: string) => role === "admin" || role === "admin_viewer",
     isUserTeamAdminForAnyTeam: () => false,
@@ -26,11 +49,13 @@ const { mockUseAuthorized, mockUseOrganizations } = vi.hoisted(() => {
     showSSOBanner: false,
   }));
 
-  const mockUseOrganizations = vi.fn(() => ({
-    data: [],
-    isLoading: false,
-    error: null,
-  }));
+  const mockUseOrganizations = vi.fn(
+    (): MockOrganizationsResult => ({
+      data: [],
+      isLoading: false,
+      error: null,
+    }),
+  );
 
   return { mockUseAuthorized, mockUseOrganizations };
 });
@@ -100,6 +125,10 @@ describe("Sidebar (leftnav)", () => {
       "Organizations",
       "Access Groups",
       "Budgets",
+      "套餐管理",
+      "计费规则",
+      "订阅管理",
+      "用量账本",
       "API Reference",
       "AI Hub",
       "Learning Resources",
@@ -110,6 +139,16 @@ describe("Sidebar (leftnav)", () => {
     topLevelLabels.forEach((label) => {
       expect(screen.getByText(label)).toBeInTheDocument();
     });
+  });
+
+  it("shows the Code Plan group and first-wave pages for Proxy Admin", () => {
+    renderWithProviders(<Sidebar {...defaultProps} />);
+
+    expect(screen.getByText("CODE PLAN")).toBeInTheDocument();
+    expect(screen.getByText("套餐管理")).toBeInTheDocument();
+    expect(screen.getByText("计费规则")).toBeInTheDocument();
+    expect(screen.getByText("订阅管理")).toBeInTheDocument();
+    expect(screen.getByText("用量账本")).toBeInTheDocument();
   });
 
   it("hides Chat by default", () => {
@@ -186,10 +225,16 @@ describe("Sidebar (leftnav)", () => {
       renderWithProviders(<Sidebar {...defaultProps} />);
       expect(screen.getByText("Logs")).toBeInTheDocument();
     });
+
+    it("hides Code Plan from Admin Viewer", () => {
+      mockUseAuthorized.mockReturnValueOnce(adminViewerAuth);
+      renderWithProviders(<Sidebar {...defaultProps} />);
+      expect(screen.queryByText("CODE PLAN")).not.toBeInTheDocument();
+    });
   });
 
   it("should show Organizations tab for organization admins", () => {
-    mockUseAuthorized.mockReturnValueOnce({
+    const orgAdminAuth = {
       userId: "org-admin-user-id",
       accessToken: "test-access-token",
       userRole: "viewer",
@@ -198,9 +243,8 @@ describe("Sidebar (leftnav)", () => {
       premiumUser: false,
       disabledPersonalKeyCreation: false,
       showSSOBanner: false,
-    });
-
-    mockUseOrganizations.mockReturnValueOnce({
+    };
+    const orgAdminOrganizations: MockOrganizationsResult = {
       data: [
         {
           organization_id: "org-1",
@@ -220,7 +264,10 @@ describe("Sidebar (leftnav)", () => {
       ],
       isLoading: false,
       error: null,
-    } as any);
+    };
+
+    mockUseAuthorized.mockReturnValueOnce(orgAdminAuth);
+    mockUseOrganizations.mockReturnValueOnce(orgAdminOrganizations);
 
     renderWithProviders(<Sidebar {...defaultProps} />);
 
@@ -257,6 +304,11 @@ describe("getBreadcrumb", () => {
 
   it("resolves a nested child page to its parent section", () => {
     expect(getBreadcrumb("search-tools")).toEqual({ section: "AI Gateway", title: "Search Tools" });
+  });
+
+  it("resolves Code Plan pages to their section", () => {
+    expect(getBreadcrumb("codeplan-plans")).toEqual({ section: "Code Plan", title: "套餐管理" });
+    expect(getBreadcrumb("codeplan-usage-ledger")).toEqual({ section: "Code Plan", title: "用量账本" });
   });
 
   it("falls back to a prettified title with no section for unknown pages", () => {
