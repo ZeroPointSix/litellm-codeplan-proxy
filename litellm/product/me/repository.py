@@ -55,8 +55,8 @@ class PortalRepository:
                 COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens
             FROM "LiteLLM_SpendLogs"
             WHERE
-                "startTime" >= $1
-                AND "startTime" < $2
+                "startTime" >= $1::timestamp
+                AND "startTime" < $2::timestamp
                 AND {scope_sql}
             GROUP BY 1
             ORDER BY 1 ASC
@@ -80,8 +80,8 @@ class PortalRepository:
             SELECT COUNT(*)::int AS total
             FROM "LiteLLM_SpendLogs"
             WHERE
-                "startTime" >= $1
-                AND "startTime" < $2
+                "startTime" >= $1::timestamp
+                AND "startTime" < $2::timestamp
                 AND {scope_sql}
             """,
             start_time,
@@ -121,8 +121,8 @@ class PortalRepository:
                 COALESCE(total_tokens, 0)::bigint AS total_tokens
             FROM "LiteLLM_SpendLogs"
             WHERE
-                "startTime" >= $1
-                AND "startTime" < $2
+                "startTime" >= $1::timestamp
+                AND "startTime" < $2::timestamp
                 AND {scope_sql}
             ORDER BY "startTime" DESC
             LIMIT ${limit_index}
