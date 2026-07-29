@@ -1,10 +1,10 @@
 "use client";
 
 import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
-import { CodePlanSubscriptionsPage } from "@/components/codeplan";
+import { CodePlanSubscriptionsPage } from "@/components/codeplan/CodePlanSubscriptionsPage";
 
 export default function CodePlanSubscriptions() {
-  const { userRole } = useAuthorized();
+  const { accessToken, userRole } = useAuthorized();
 
-  return <CodePlanSubscriptionsPage userRole={userRole} />;
+  return <CodePlanSubscriptionsPage accessToken={accessToken} userRole={userRole} />;
 }
