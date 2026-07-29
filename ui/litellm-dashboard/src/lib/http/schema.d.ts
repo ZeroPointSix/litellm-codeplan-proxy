@@ -17079,6 +17079,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/integration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Integration */
+        get: operations["get_my_integration_v1_me_integration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List My Keys */
+        get: operations["list_my_keys_v1_me_keys_get"];
+        put?: never;
+        /** Create My Key */
+        post: operations["create_my_key_v1_me_keys_post"];
+        /** Revoke My Key By Query */
+        delete: operations["revoke_my_key_by_query_v1_me_keys_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke My Key */
+        delete: operations["revoke_my_key_v1_me_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Quota */
+        get: operations["get_my_quota_v1_me_quota_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Requests */
+        get: operations["get_my_requests_v1_me_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Subscription */
+        get: operations["get_my_subscription_v1_me_subscription_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Usage */
+        get: operations["get_my_usage_v1_me_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/memory": {
         parameters: {
             query?: never;
@@ -30187,6 +30308,268 @@ export interface components {
              * @description New status: 'published' or 'production'.
              */
             version_status: string;
+        };
+        /** PortalIntegrationResponse */
+        PortalIntegrationResponse: {
+            /** Allowed Models */
+            allowed_models: string[];
+            /** Allowed Routes */
+            allowed_routes: string[];
+            /** Api Base Url */
+            api_base_url: string;
+            /** Base Url */
+            base_url: string;
+            /** Project Id */
+            project_id: string;
+            /** Sample Config */
+            sample_config: {
+                [key: string]: unknown;
+            };
+            /** Subscription Id */
+            subscription_id: string;
+        };
+        /** PortalKeyCreateRequest */
+        PortalKeyCreateRequest: {
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** PortalKeyCreateResponse */
+        PortalKeyCreateResponse: {
+            /** Key */
+            key: string;
+            /** Key Id */
+            key_id: string;
+            subscription: components["schemas"]["PortalSubscription"];
+            /** Token Id */
+            token_id: string;
+        };
+        /** PortalKeyListResponse */
+        PortalKeyListResponse: {
+            /** Data */
+            data: components["schemas"]["PortalKeyRecord"][];
+            /** Project Id */
+            project_id: string;
+            /** Subscription Id */
+            subscription_id: string;
+        };
+        /** PortalKeyRecord */
+        PortalKeyRecord: {
+            /** Allowed Routes */
+            allowed_routes: string[];
+            /**
+             * Blocked
+             * @default false
+             */
+            blocked: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Key Id */
+            key_id: string;
+            /** Last Active */
+            last_active?: string | null;
+            /** Models */
+            models: string[];
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** PortalKeyRevokeResponse */
+        PortalKeyRevokeResponse: {
+            /** Revoked Key Id */
+            revoked_key_id: string;
+            subscription: components["schemas"]["PortalSubscription"];
+        };
+        /** PortalQuotaResponse */
+        PortalQuotaResponse: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Generated At Local */
+            generated_at_local: string;
+            /** Project Id */
+            project_id: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Timezone */
+            timezone: string;
+            /** Windows */
+            windows: components["schemas"]["PortalQuotaWindow"][];
+        };
+        /** PortalQuotaWindow */
+        PortalQuotaWindow: {
+            /** Anchor At */
+            anchor_at?: string | null;
+            /** Anchor At Local */
+            anchor_at_local?: string | null;
+            /** Limit */
+            limit: number;
+            /** Name */
+            name: string;
+            /** Period Id */
+            period_id: string;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Reset At
+             * Format: date-time
+             */
+            reset_at: string;
+            /** Reset At Local */
+            reset_at_local: string;
+            /** Seconds Until Reset */
+            seconds_until_reset: number;
+            /**
+             * Starts On First Success
+             * @default false
+             */
+            starts_on_first_success: boolean;
+            /** Used */
+            used: number;
+        };
+        /** PortalRequestListResponse */
+        PortalRequestListResponse: {
+            /** Data */
+            data: components["schemas"]["PortalRequestRecord"][];
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Total */
+            total: number;
+            /** Total Pages */
+            total_pages: number;
+        };
+        /** PortalRequestRecord */
+        PortalRequestRecord: {
+            /** Api Base */
+            api_base?: string | null;
+            /** Cache Hit */
+            cache_hit?: boolean | string | null;
+            /** Call Type */
+            call_type?: string | null;
+            /** End Time */
+            end_time?: string | null;
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Model */
+            model?: string | null;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Duration Ms */
+            request_duration_ms?: number | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Start Time */
+            start_time?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** PortalSubscription */
+        PortalSubscription: {
+            /** Created At */
+            created_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Key Count */
+            key_count: number;
+            /** Max Keys */
+            max_keys: number;
+            /** Plan Id */
+            plan_id: string;
+            plan_snapshot: components["schemas"]["PlanSnapshot"];
+            /** Project Id */
+            project_id: string;
+            /** Renewed At */
+            renewed_at?: string | null;
+            /** Status */
+            status: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** PortalSubscriptionResponse */
+        PortalSubscriptionResponse: {
+            subscription: components["schemas"]["PortalSubscription"];
+        };
+        /** PortalUsageBucket */
+        PortalUsageBucket: {
+            /** Date */
+            date: string;
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Count */
+            request_count: number;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** PortalUsageResponse */
+        PortalUsageResponse: {
+            /** Buckets */
+            buckets: components["schemas"]["PortalUsageBucket"][];
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Timezone */
+            timezone: string;
+            totals: components["schemas"]["PortalUsageTotals"];
+        };
+        /** PortalUsageTotals */
+        PortalUsageTotals: {
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Count */
+            request_count: number;
+            /** Total Tokens */
+            total_tokens: number;
         };
         /** Prompt */
         Prompt: {
@@ -56605,6 +56988,259 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MCPUserCredentialListItem"][];
+                };
+            };
+        };
+    };
+    get_my_integration_v1_me_integration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIntegrationResponse"];
+                };
+            };
+        };
+    };
+    list_my_keys_v1_me_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyListResponse"];
+                };
+            };
+        };
+    };
+    create_my_key_v1_me_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_my_key_by_query_v1_me_keys_delete: {
+        parameters: {
+            query: {
+                key_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_my_key_v1_me_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_quota_v1_me_quota_get: {
+        parameters: {
+            query?: {
+                timezone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalQuotaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_requests_v1_me_requests_get: {
+        parameters: {
+            query?: {
+                start_time?: string | null;
+                end_time?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalRequestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_subscription_v1_me_subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSubscriptionResponse"];
+                };
+            };
+        };
+    };
+    get_my_usage_v1_me_usage_get: {
+        parameters: {
+            query?: {
+                timezone?: string;
+                start_time?: string | null;
+                end_time?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalUsageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
