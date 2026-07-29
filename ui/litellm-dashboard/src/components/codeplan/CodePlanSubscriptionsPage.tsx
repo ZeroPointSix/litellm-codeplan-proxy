@@ -50,12 +50,7 @@ import {
   revokeCodePlanSubscriptionKey,
   upgradeCodePlanSubscription,
 } from "./codeplan_networking";
-import {
-  CODE_PLAN_PAGE_DEFINITIONS,
-  CodePlanBreadcrumb,
-  CodePlanEmptyState,
-  CodePlanErrorState,
-} from "./CodePlanPage";
+import { CODE_PLAN_PAGE_DEFINITIONS, CodePlanBreadcrumb, CodePlanEmptyState, CodePlanErrorState } from "./CodePlanPage";
 import type {
   CodePlanMetadata,
   CodePlanPlan,
@@ -254,10 +249,7 @@ const sumWindowCredits = (
     .reduce((sum, entry) => sum + (Number(entry.credits) || 0), 0);
 };
 
-const buildPlanDiffRows = (
-  snapshot: CodePlanPlanSnapshot,
-  currentPlan?: CodePlanPlan,
-): PlanDiffRow[] => {
+const buildPlanDiffRows = (snapshot: CodePlanPlanSnapshot, currentPlan?: CodePlanPlan): PlanDiffRow[] => {
   if (!currentPlan) return [];
   const comparableFields: Array<{
     key: keyof CodePlanPlanSnapshot | "plan_version";
@@ -407,6 +399,22 @@ function PlanSnapshotDiff({
   const snapshot = subscription.plan_snapshot;
   const rows = buildPlanDiffRows(snapshot, currentPlan);
   const hasDiff = rows.some((row) => row.changed);
+  let snapshotStateAlert: ReactNode;
+
+  if (!currentPlan) {
+    snapshotStateAlert = (
+      <Alert
+        type="warning"
+        showIcon
+        message="当前 Plan 模板不可用"
+        description="该订阅仍按 plan_snapshot 运行；当前 Plan 可能已被归档、删除或不在返回列表中。"
+      />
+    );
+  } else if (hasDiff) {
+    snapshotStateAlert = <Alert type="warning" showIcon message="该订阅正在使用旧权益" />;
+  } else {
+    snapshotStateAlert = <Alert type="success" showIcon message="plan_snapshot 与当前 Plan 模板一致" />;
+  }
 
   const columns: TableProps<PlanDiffRow>["columns"] = [
     { title: "字段", dataIndex: "label", key: "label", width: 170 },
@@ -443,18 +451,7 @@ function PlanSnapshotDiff({
           {snapshot.credit_cache_read_multiplier} / cache write {snapshot.credit_cache_write_multiplier}
         </Descriptions.Item>
       </Descriptions>
-      {!currentPlan ? (
-        <Alert
-          type="warning"
-          showIcon
-          message="当前 Plan 模板不可用"
-          description="该订阅仍按 plan_snapshot 运行；当前 Plan 可能已被归档、删除或不在返回列表中。"
-        />
-      ) : hasDiff ? (
-        <Alert type="warning" showIcon message="该订阅正在使用旧权益" />
-      ) : (
-        <Alert type="success" showIcon message="plan_snapshot 与当前 Plan 模板一致" />
-      )}
+      {snapshotStateAlert}
       {currentPlan ? (
         <Table<PlanDiffRow>
           rowKey="key"
@@ -498,20 +495,20 @@ function QuotaEstimateView({
       />
       <Descriptions size="small" bordered column={2}>
         <Descriptions.Item label="5h window start">{formatDateTime(subscription.window_5h_start)}</Descriptions.Item>
-        <Descriptions.Item label="week window start">{formatDateTime(subscription.window_week_start)}</Descriptions.Item>
+        <Descriptions.Item label="week window start">
+          {formatDateTime(subscription.window_week_start)}
+        </Descriptions.Item>
         <Descriptions.Item label="5h 已用 / 配额">
           {loading ? "加载中" : `${formatCredits(usageEstimate?.fiveHourUsed)} / ${formatCredits(snapshot.quota_5h)}`}
         </Descriptions.Item>
-        <Descriptions.Item label="5h 余量">
-          {loading ? "加载中" : formatCredits(fiveHourRemaining)}
-        </Descriptions.Item>
+        <Descriptions.Item label="5h 余量">{loading ? "加载中" : formatCredits(fiveHourRemaining)}</Descriptions.Item>
         <Descriptions.Item label="week 已用 / 配额">
           {loading ? "加载中" : `${formatCredits(usageEstimate?.weekUsed)} / ${formatCredits(snapshot.quota_weekly)}`}
         </Descriptions.Item>
-        <Descriptions.Item label="week 余量">
-          {loading ? "加载中" : formatCredits(weekRemaining)}
+        <Descriptions.Item label="week 余量">{loading ? "加载中" : formatCredits(weekRemaining)}</Descriptions.Item>
+        <Descriptions.Item label="参与推算事件数">
+          {loading ? "加载中" : usageEstimate?.eventCount ?? 0}
         </Descriptions.Item>
-        <Descriptions.Item label="参与推算事件数">{loading ? "加载中" : usageEstimate?.eventCount ?? 0}</Descriptions.Item>
         <Descriptions.Item label="结果范围">
           {usageEstimate?.reachedLimit ? <Tag color="warning">达到 1000 条上限</Tag> : <Tag>完整返回范围</Tag>}
         </Descriptions.Item>
@@ -661,15 +658,32 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
         setDetailLoading(false);
       }
     },
-    [accessToken, issueKeyForm, loadUsageEstimate, messageApi, renewForm, revokeKeyForm, updateSubscriptionInList, upgradeForm],
+    [
+      accessToken,
+      issueKeyForm,
+      loadUsageEstimate,
+      messageApi,
+      renewForm,
+      revokeKeyForm,
+      updateSubscriptionInList,
+      upgradeForm,
+    ],
   );
 
   useEffect(() => {
-    void loadPlans();
+    const timeoutId = window.setTimeout(() => {
+      void loadPlans();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [loadPlans]);
 
   useEffect(() => {
-    void loadSubscriptions();
+    const timeoutId = window.setTimeout(() => {
+      void loadSubscriptions();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [loadSubscriptions]);
 
   const openCreateDrawer = () => {
@@ -689,11 +703,14 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
     createForm.resetFields();
   };
 
-  const openDetailDrawer = useCallback((subscription: CodePlanSubscription) => {
-    setSelectedSubscription(subscription);
-    setDetailDrawerOpen(true);
-    void loadSubscriptionDetail(subscription.subscription_id);
-  }, [loadSubscriptionDetail]);
+  const openDetailDrawer = useCallback(
+    (subscription: CodePlanSubscription) => {
+      setSelectedSubscription(subscription);
+      setDetailDrawerOpen(true);
+      void loadSubscriptionDetail(subscription.subscription_id);
+    },
+    [loadSubscriptionDetail],
+  );
 
   const closeDetailDrawer = () => {
     setDetailDrawerOpen(false);
@@ -777,12 +794,16 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
         setOperationKey(action);
         try {
           const body = { version: selectedSubscription.version };
-          const next =
-            action === "pause"
-              ? await pauseCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body)
-              : action === "cancel"
-                ? await cancelCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body)
-                : await expireCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body);
+          let next: CodePlanSubscription;
+
+          if (action === "pause") {
+            next = await pauseCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body);
+          } else if (action === "cancel") {
+            next = await cancelCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body);
+          } else {
+            next = await expireCodePlanSubscription(accessToken, selectedSubscription.subscription_id, body);
+          }
+
           messageApi.success(copy.success);
           setSelectedSubscription(next);
           updateSubscriptionInList(next);
@@ -1025,7 +1046,9 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
         dataIndex: "litellm_key_ids",
         key: "litellm_key_ids",
         width: 90,
-        render: (keyIds: string[]) => <Tag color={keyIds?.length ? "processing" : "default"}>{keyIds?.length ?? 0}</Tag>,
+        render: (keyIds: string[]) => (
+          <Tag color={keyIds?.length ? "processing" : "default"}>{keyIds?.length ?? 0}</Tag>
+        ),
       },
       {
         title: "生效时间",
@@ -1075,6 +1098,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
     ],
     [openDetailDrawer],
   );
+  const emptyDetailDrawerContent = detailLoading ? <Text>加载中</Text> : null;
 
   return (
     <Space direction="vertical" size={16} className="w-full">
@@ -1173,7 +1197,11 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
               placeholder="仅可选择 active Plan"
             />
           </Form.Item>
-          <Form.Item name="project_id" label="用户 / project_id" rules={[{ required: true, message: "请输入 project_id" }]}>
+          <Form.Item
+            name="project_id"
+            label="用户 / project_id"
+            rules={[{ required: true, message: "请输入 project_id" }]}
+          >
             <Input maxLength={255} placeholder="project id" />
           </Form.Item>
           <Form.Item name="expires_at" label="到期时间">
@@ -1226,11 +1254,19 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                 <Text code>{selectedSubscription.plan_id}</Text>
               </Descriptions.Item>
               <Descriptions.Item label="版本">v{selectedSubscription.version}</Descriptions.Item>
-              <Descriptions.Item label="created_at">{formatDateTime(selectedSubscription.created_at)}</Descriptions.Item>
-              <Descriptions.Item label="expires_at">{formatDateTime(selectedSubscription.expires_at)}</Descriptions.Item>
-              <Descriptions.Item label="renewed_at">{formatDateTime(selectedSubscription.renewed_at)}</Descriptions.Item>
+              <Descriptions.Item label="created_at">
+                {formatDateTime(selectedSubscription.created_at)}
+              </Descriptions.Item>
+              <Descriptions.Item label="expires_at">
+                {formatDateTime(selectedSubscription.expires_at)}
+              </Descriptions.Item>
+              <Descriptions.Item label="renewed_at">
+                {formatDateTime(selectedSubscription.renewed_at)}
+              </Descriptions.Item>
               <Descriptions.Item label="paused_at">{formatDateTime(selectedSubscription.paused_at)}</Descriptions.Item>
-              <Descriptions.Item label="canceled_at">{formatDateTime(selectedSubscription.canceled_at)}</Descriptions.Item>
+              <Descriptions.Item label="canceled_at">
+                {formatDateTime(selectedSubscription.canceled_at)}
+              </Descriptions.Item>
               <Descriptions.Item label="Key 数">{selectedSubscription.litellm_key_ids.length}</Descriptions.Item>
             </Descriptions>
 
@@ -1322,12 +1358,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Title level={5} className="!mt-0">
                       升降级
                     </Title>
-                    <Alert
-                      type="info"
-                      showIcon
-                      className="mb-3"
-                      message="升级即时生效；降级当前周期结束后生效"
-                    />
+                    <Alert type="info" showIcon className="mb-3" message="升级即时生效；降级当前周期结束后生效" />
                     <Form<UpgradeSubscriptionFormValues> form={upgradeForm} layout="vertical">
                       <Form.Item
                         name="plan_id"
@@ -1363,11 +1394,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                         <Input.TextArea rows={3} spellCheck={false} />
                       </Form.Item>
                     </Form>
-                    <Button
-                      type="primary"
-                      loading={operationKey === "upgrade"}
-                      onClick={submitUpgradeSubscription}
-                    >
+                    <Button type="primary" loading={operationKey === "upgrade"} onClick={submitUpgradeSubscription}>
                       提交升降级
                     </Button>
                   </div>
@@ -1404,7 +1431,11 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Title level={5} className="!mt-0">
                       代发 Key
                     </Title>
-                    <Form<IssueKeyFormValues> form={issueKeyForm} layout="vertical" initialValues={{ metadata: defaultMetadataJson }}>
+                    <Form<IssueKeyFormValues>
+                      form={issueKeyForm}
+                      layout="vertical"
+                      initialValues={{ metadata: defaultMetadataJson }}
+                    >
                       <Form.Item name="key_alias" label="Key alias">
                         <Input maxLength={255} placeholder="可选" />
                       </Form.Item>
@@ -1432,7 +1463,10 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                           showSearch
                           optionFilterProp="label"
                           disabled={!selectedSubscription.litellm_key_ids.length}
-                          options={selectedSubscription.litellm_key_ids.map((keyId) => ({ label: keyId, value: keyId }))}
+                          options={selectedSubscription.litellm_key_ids.map((keyId) => ({
+                            label: keyId,
+                            value: keyId,
+                          }))}
                           placeholder="选择要吊销的 Key"
                         />
                       </Form.Item>
@@ -1451,9 +1485,9 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
               </Space>
             </Card>
           </Space>
-        ) : detailLoading ? (
-          <Text>加载中</Text>
-        ) : null}
+        ) : (
+          emptyDetailDrawerContent
+        )}
       </Drawer>
 
       <ProvisionResultModal result={provisionResult} onClose={() => setProvisionResult(null)} />
