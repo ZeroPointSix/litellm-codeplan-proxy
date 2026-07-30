@@ -127,10 +127,8 @@ export const usageLedgerMetadataReason = (metadata?: CodePlanUsageLedgerEntry["m
   return typeof reason === "string" && reason.trim() ? reason.trim() : "-";
 };
 
-export const isUsageLedgerTruncated = (
-  entries: CodePlanUsageLedgerEntry[],
-  options?: { hasMore?: boolean },
-): boolean => Boolean(options?.hasMore) || entries.length >= MAX_LEDGER_LIMIT;
+export const isUsageLedgerTruncated = (entries: CodePlanUsageLedgerEntry[], options?: { hasMore?: boolean }): boolean =>
+  Boolean(options?.hasMore) || entries.length >= MAX_LEDGER_LIMIT;
 
 export const summarizeUsageLedgerEntries = (
   entries: CodePlanUsageLedgerEntry[],
@@ -680,8 +678,8 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
             流水明细
           </Title>
           <Text type="secondary">
-            每次最多拉取 {MAX_LEDGER_LIMIT} 条；可用「加载更多」翻页，CSV 会按 offset 拉取全部匹配流水。点击
-            request_id 可展开同请求链路。
+            每次最多拉取 {MAX_LEDGER_LIMIT} 条；可用「加载更多」翻页，CSV 会按 offset 拉取全部匹配流水。点击 request_id
+            可展开同请求链路。
           </Text>
         </div>
         {isUsageLedgerTruncated(entries, { hasMore }) ? (
