@@ -162,11 +162,7 @@ async def manual_adjust_usage_ledger(
         ) from exc
     except ValueError as exc:
         message = str(exc)
-        status_code = (
-            status.HTTP_404_NOT_FOUND
-            if "subscription not found" in message
-            else status.HTTP_400_BAD_REQUEST
-        )
+        status_code = status.HTTP_404_NOT_FOUND if "subscription not found" in message else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail={"error": message}) from exc
     except (RuntimeError, TypeError) as exc:
         verbose_proxy_logger.exception("Code Plan usage ledger manual adjustment failed: %s", exc)
