@@ -55,6 +55,19 @@ const diffClass: Record<RowState, string> = {
   unchanged: "",
 };
 
+const effectNotice = [
+  "配置调整仅对新 Usage 生效，不重算历史账本；",
+  "真实扣费按后端 CreditRule 默认倍率 (*) 计算。",
+].join("");
+const actionNotice = [
+  "该操作仅对新产生的 Usage 生效，不重算历史账本；",
+  "已有 Usage 会继续保留当时冻结的倍率版本。",
+].join("");
+const editorNotice = [
+  "只有默认兼容行 (*) 同步到后端 multiplier 字段并参与真实扣费；",
+  "模型行仅保存到 metadata.model_multipliers。",
+].join("");
+const updatedAt = (rule: CodePlanCreditRule) => new Date(rule.updated_at ?? rule.created_at ?? 0).getTime();
 const num = (value: unknown, fallback = 1) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 const show = (value: number) =>
   Number.isInteger(value) ? String(value) : value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
@@ -93,6 +106,21 @@ const rowsOf = (rule: CodePlanCreditRule): Row[] => {
   if (!Array.isArray(raw)) return [base];
   const metadataRows = raw.filter((item) => item && typeof item === "object").map((item) => item as Partial<Row>);
   return rows([base, ...metadataRows]);
+};
+const latestRules = (items: CodePlanCreditRule[]) => {
+  const byRuleId = new Map<string, CodePlanCreditRule>();
+  for (const rule of items) {
+    const current = byRuleId.get(rule.credit_rule_id);
+    const isNewerVersion = current ? rule.version > current.version : true;
+    const isNewerSameVersion = current
+      ? rule.version === current.version && updatedAt(rule) > updatedAt(current)
+      : false;
+    if (isNewerVersion || isNewerSameVersion) {
+      byRuleId.set(rule.credit_rule_id, rule);
+    }
+  }
+
+  return [...byRuleId.values()].sort((left, right) => updatedAt(right) - updatedAt(left));
 };
 const label = (row?: Row) =>
   row
@@ -220,7 +248,16 @@ export default function CodePlanCreditRules() {
   const ruleOptions = useMemo(() => rules.map((rule) => rule.credit_rule_id), [rules]);
   const previewRule = rules.find((rule) => rule.credit_rule_id === previewId) ?? rules[0];
   const previewRows = previewRule ? rowsOf(previewRule) : [];
-  const previewRow = previewRows.find((row) => row.model_name === previewModel) ?? previewRows[0];
+  const previewBillingRow = previewRows.find((row) => row.model_name === STAR) ?? previewRows[0];
+  const selectedMetadataRow = previewRows.find(
+    (row) => row.model_name === previewModel && row.model_name !== STAR,
+  );
+  const previewNotice =
+    previewModel === STAR
+      ? ""
+      : selectedMetadataRow
+        ? "该模型行仅作为 metadata 保存；后端真实扣费当前仍使用 * 默认倍率。"
+        : "未配置该模型行；后端真实扣费使用 * 默认倍率。";
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -231,7 +268,7 @@ export default function CodePlanCreditRules() {
         listCodePlanAvailableModels(accessToken),
         listCodePlanPlans(accessToken, { status: "active" }),
       ]);
-      const nextRules = ruleList.data ?? [];
+      const nextRules = latestRules(ruleList.data ?? []);
       const nextRefs: Record<string, CodePlanPlan[]> = {};
       for (const plan of planList.data ?? []) {
         if (plan.credit_rule_id) nextRefs[plan.credit_rule_id] = [...(nextRefs[plan.credit_rule_id] ?? []), plan];
@@ -243,19 +280,20 @@ export default function CodePlanCreditRules() {
       setRules(nextRules);
       setRefs(nextRefs);
       setModels(nextModels);
-      if (!previewId && nextRules[0]) setPreviewId(nextRules[0].credit_rule_id);
-      if (!diffId && nextRules[0]) {
-        const previousVersion = Math.max(1, nextRules[0].version - 1);
-        setDiffId(nextRules[0].credit_rule_id);
-        setFrom(previousVersion);
-        setTo(nextRules[0].version);
+      if (nextRules[0]) {
+        const firstRule = nextRules[0];
+        const previousVersion = Math.max(1, firstRule.version - 1);
+        setPreviewId((current) => current || firstRule.credit_rule_id);
+        setDiffId((current) => current || firstRule.credit_rule_id);
+        setFrom((current) => (current === 1 ? previousVersion : current));
+        setTo((current) => (current === 1 ? firstRule.version : current));
       }
     } catch (error) {
       msg.error(formatCodePlanError(error));
     } finally {
       setLoading(false);
     }
-  }, [accessToken, diffId, msg, previewId, status]);
+  }, [accessToken, msg, status]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -294,13 +332,11 @@ export default function CodePlanCreditRules() {
   const action = async (rule: CodePlanCreditRule, kind: "activate" | "archive") => {
     const usingPlans = refs[rule.credit_rule_id] ?? [];
     if (kind === "archive" && usingPlans.length) {
-      const planNames = usingPlans.map((plan) => `${plan.name} (${plan.plan_id})`).join("\n");
-      window.alert(`不能归档：仍有 active Plan 引用\n${planNames}`);
+      const planNames = usingPlans.map((plan) => `${plan.name} (${plan.plan_id})`).join("、");
+      msg.warning(`不能归档：仍有 active Plan 引用：${planNames}`);
       return;
     }
-    const confirmed = window.confirm(
-      "该操作仅对新产生的 Usage 生效，不重算历史账本；已有 Usage 会继续保留当时冻结的倍率版本。",
-    );
+    const confirmed = window.confirm(actionNotice);
     if (!confirmed) {
       return;
     }
@@ -351,13 +387,9 @@ export default function CodePlanCreditRules() {
         <Title level={2} className="!mb-0">
           计费规则
         </Title>
-        <Text>管理 CreditRule 倍率表、预览计算和版本历史。</Text>
+        <Text>管理 CreditRule 默认倍率、metadata 模型行、预览计算和版本历史。</Text>
       </div>
-      <Alert
-        type="info"
-        showIcon
-        message="配置调整仅对新 Usage 生效，不重算历史账本；每条 Usage 会冻结当时的倍率版本。"
-      />
+      <Alert type="info" showIcon message={effectNotice} />
 
       <Card>
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -377,7 +409,7 @@ export default function CodePlanCreditRules() {
           <Button type="primary" onClick={() => open()}>
             新建规则
           </Button>
-          <Text type="secondary">共 {rules.length} 条</Text>
+          <Text type="secondary">共 {rules.length} 条当前规则</Text>
         </div>
 
         <div className="overflow-x-auto">
@@ -387,7 +419,7 @@ export default function CodePlanCreditRules() {
                 <th>规则</th>
                 <th>状态</th>
                 <th>版本</th>
-                <th>模型数</th>
+                <th>模型行数</th>
                 <th>Plan 引用</th>
                 <th>默认倍率</th>
                 <th>更新时间</th>
@@ -398,6 +430,8 @@ export default function CodePlanCreditRules() {
               {rules.map((rule) => {
                 const referencedPlans = refs[rule.credit_rule_id] ?? [];
                 const ruleRows = rowsOf(rule);
+                const billingRow = ruleRows.find((row) => row.model_name === STAR) ?? ruleRows[0];
+                const metadataRowCount = ruleRows.filter((row) => row.model_name !== STAR).length;
                 const previousVersion = Math.max(1, rule.version - 1);
                 return (
                   <tr key={`${rule.credit_rule_id}:${rule.version}`} className="border-b align-top">
@@ -412,11 +446,11 @@ export default function CodePlanCreditRules() {
                       <Tag color={statusColor[rule.status]}>{rule.status}</Tag>
                     </td>
                     <td>v{rule.version}</td>
-                    <td>{ruleRows.filter((row) => row.model_name !== STAR).length}</td>
+                    <td>{metadataRowCount}</td>
                     <td>
                       <Tag color={referencedPlans.length ? "warning" : "default"}>{referencedPlans.length}</Tag>
                     </td>
-                    <td>{label(ruleRows[0])}</td>
+                    <td>{label(billingRow)}</td>
                     <td>{rule.updated_at ? new Date(rule.updated_at).toLocaleString() : "-"}</td>
                     <td>
                       <Button size="small" disabled={rule.status === "archived"} onClick={() => open(rule)}>
@@ -455,12 +489,7 @@ export default function CodePlanCreditRules() {
 
       {showEditor && (
         <Card title={editing ? `编辑 ${editing.credit_rule_id}` : "新建 CreditRule"}>
-          <Alert
-            className="mb-3"
-            type="info"
-            showIcon
-            message="默认兼容行 (*) 同步到后端 multiplier 字段；模型行保存到 metadata.model_multipliers。"
-          />
+          <Alert className="mb-3" type="info" showIcon message={editorNotice} />
           <div className="grid gap-3">
             <input
               className="rounded border px-3 py-2"
@@ -609,8 +638,17 @@ export default function CodePlanCreditRules() {
                 公式：input_tokens x input_multiplier + output_tokens x output_multiplier + cache_read_tokens x
                 cache_read_multiplier + cache_write_tokens x cache_write_multiplier
               </Text>
-              <div className="mt-2 text-2xl font-semibold">{show(calc(previewRow, usage))} credits</div>
-              <Text type="secondary">命中倍率：{label(previewRow)}</Text>
+              <div className="mt-2 text-2xl font-semibold">{show(calc(previewBillingRow, usage))} credits</div>
+              <Text type="secondary">后端计费倍率：{label(previewBillingRow)}</Text>
+              {selectedMetadataRow && (
+                <>
+                  <br />
+                  <Text type="secondary">metadata 模型行：{label(selectedMetadataRow)}</Text>
+                </>
+              )}
+              {previewNotice && (
+                <Alert className="mt-3" type="warning" showIcon message={previewNotice} />
+              )}
             </div>
           </div>
         </Card>
