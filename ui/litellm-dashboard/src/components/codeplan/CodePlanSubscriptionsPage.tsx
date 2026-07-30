@@ -157,6 +157,21 @@ const simpleActionCopy: Record<
   },
 };
 
+const canRunSimpleSubscriptionAction = (status: SubscriptionStatus, action: SimpleSubscriptionAction): boolean => {
+  if (action === "pause") return status === "active";
+  return status === "active" || status === "paused";
+};
+
+const simpleActionDisabledText: Record<SimpleSubscriptionAction, string> = {
+  pause: "仅 active 订阅可暂停",
+  cancel: "仅 active / paused 订阅可取消",
+  expire: "仅 active / paused 订阅可置为过期",
+};
+
+const canRenewSubscription = (status: SubscriptionStatus): boolean => status !== "canceled";
+
+const canUpgradeSubscription = (status: SubscriptionStatus): boolean => status === "active";
+
 const billableUsageEvents = new Set(["settle", "manual_adjust"]);
 
 const formatDateTime = (value?: string | null): string => {
@@ -232,6 +247,12 @@ const getEarliestWindowStart = (subscription: CodePlanSubscription): string | un
   return new Date(Math.min(...starts)).toISOString();
 };
 
+const matchesWindowStart = (
+  entry: CodePlanUsageLedgerEntry,
+  windowStart: string | null | undefined,
+  windowKey: "window_5h_start" | "window_week_start",
+): boolean => Boolean(windowStart) && sameInstant(entry[windowKey], windowStart);
+
 const sumWindowCredits = (
   entries: CodePlanUsageLedgerEntry[],
   windowStart: string | null | undefined,
@@ -240,12 +261,7 @@ const sumWindowCredits = (
   const startTime = timeValue(windowStart);
   if (startTime === null) return null;
   return entries
-    .filter((entry) => billableUsageEvents.has(entry.event_type))
-    .filter((entry) => {
-      if (sameInstant(entry[windowKey], windowStart)) return true;
-      const createdAt = timeValue(entry.created_at);
-      return createdAt !== null && createdAt >= startTime;
-    })
+    .filter((entry) => billableUsageEvents.has(entry.event_type) && matchesWindowStart(entry, windowStart, windowKey))
     .reduce((sum, entry) => sum + (Number(entry.credits) || 0), 0);
 };
 
@@ -530,6 +546,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
   const [subscriptions, setSubscriptions] = useState<CodePlanSubscription[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [projectFilter, setProjectFilter] = useState("");
+  const [submittedProjectFilter, setSubmittedProjectFilter] = useState("");
   const [planFilter, setPlanFilter] = useState<string | undefined>();
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(false);
@@ -576,7 +593,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
     try {
       const response = await listCodePlanSubscriptions(accessToken, {
         status: statusFilter === "all" ? undefined : statusFilter,
-        project_id: trimToNull(projectFilter),
+        project_id: trimToNull(submittedProjectFilter),
         plan_id: planFilter,
       });
       setSubscriptions(response.data ?? []);
@@ -585,7 +602,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
     } finally {
       setLoadingSubscriptions(false);
     }
-  }, [accessToken, planFilter, projectFilter, statusFilter]);
+  }, [accessToken, planFilter, statusFilter, submittedProjectFilter]);
 
   const updateSubscriptionInList = useCallback((subscription: CodePlanSubscription) => {
     setSubscriptions((previous) => {
@@ -612,10 +629,17 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
           limit: 1000,
         });
         const entries = response.data ?? [];
+        const billableWindowEntries = entries
+          .filter((entry) => billableUsageEvents.has(entry.event_type))
+          .filter(
+            (entry) =>
+              matchesWindowStart(entry, subscription.window_5h_start, "window_5h_start") ||
+              matchesWindowStart(entry, subscription.window_week_start, "window_week_start"),
+          );
         setUsageEstimate({
           fiveHourUsed: sumWindowCredits(entries, subscription.window_5h_start, "window_5h_start"),
           weekUsed: sumWindowCredits(entries, subscription.window_week_start, "window_week_start"),
-          eventCount: entries.filter((entry) => billableUsageEvents.has(entry.event_type)).length,
+          eventCount: billableWindowEntries.length,
           reachedLimit: entries.length >= 1000,
         });
       } catch (error) {
@@ -685,6 +709,15 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
 
     return () => window.clearTimeout(timeoutId);
   }, [loadSubscriptions]);
+
+  const applyProjectFilter = useCallback(() => {
+    const nextProjectFilter = projectFilter.trim();
+    if (nextProjectFilter === submittedProjectFilter) {
+      void loadSubscriptions();
+      return;
+    }
+    setSubmittedProjectFilter(nextProjectFilter);
+  }, [loadSubscriptions, projectFilter, submittedProjectFilter]);
 
   const openCreateDrawer = () => {
     createForm.setFieldsValue({
@@ -777,6 +810,10 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
 
   const runSimpleAction = (action: SimpleSubscriptionAction) => {
     if (!selectedSubscription) return;
+    if (!canRunSimpleSubscriptionAction(selectedSubscription.status, action)) {
+      messageApi.warning(simpleActionDisabledText[action]);
+      return;
+    }
     const copy = simpleActionCopy[action];
     modalApi.confirm({
       title: `${copy.label}？`,
@@ -1098,6 +1135,19 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
     ],
     [openDetailDrawer],
   );
+  const canPauseSelectedSubscription = selectedSubscription
+    ? canRunSimpleSubscriptionAction(selectedSubscription.status, "pause")
+    : false;
+  const canCancelSelectedSubscription = selectedSubscription
+    ? canRunSimpleSubscriptionAction(selectedSubscription.status, "cancel")
+    : false;
+  const canExpireSelectedSubscription = selectedSubscription
+    ? canRunSimpleSubscriptionAction(selectedSubscription.status, "expire")
+    : false;
+  const canRenewSelectedSubscription = selectedSubscription ? canRenewSubscription(selectedSubscription.status) : false;
+  const canUpgradeSelectedSubscription = selectedSubscription
+    ? canUpgradeSubscription(selectedSubscription.status)
+    : false;
   const emptyDetailDrawerContent = detailLoading ? <Text>加载中</Text> : null;
 
   return (
@@ -1126,8 +1176,11 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
               placeholder="project_id"
               value={projectFilter}
               onChange={(event) => setProjectFilter(event.target.value)}
-              onPressEnter={() => void loadSubscriptions()}
+              onPressEnter={() => applyProjectFilter()}
             />
+            <Button onClick={() => applyProjectFilter()} loading={loadingSubscriptions}>
+              查询
+            </Button>
             <Select
               allowClear
               showSearch
@@ -1301,6 +1354,8 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                   <Space wrap>
                     <Button
                       icon={<PauseCircleOutlined />}
+                      disabled={!canPauseSelectedSubscription}
+                      title={canPauseSelectedSubscription ? undefined : simpleActionDisabledText.pause}
                       loading={operationKey === "pause"}
                       onClick={() => runSimpleAction("pause")}
                     >
@@ -1309,6 +1364,8 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Button
                       danger
                       icon={<CloseCircleOutlined />}
+                      disabled={!canCancelSelectedSubscription}
+                      title={canCancelSelectedSubscription ? undefined : simpleActionDisabledText.cancel}
                       loading={operationKey === "cancel"}
                       onClick={() => runSimpleAction("cancel")}
                     >
@@ -1317,6 +1374,8 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Button
                       danger
                       icon={<DeleteOutlined />}
+                      disabled={!canExpireSelectedSubscription}
+                      title={canExpireSelectedSubscription ? undefined : simpleActionDisabledText.expire}
                       loading={operationKey === "expire"}
                       onClick={() => runSimpleAction("expire")}
                     >
@@ -1330,7 +1389,11 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Title level={5} className="!mt-0">
                       续期
                     </Title>
-                    <Form<RenewSubscriptionFormValues> form={renewForm} layout="vertical">
+                    <Form<RenewSubscriptionFormValues>
+                      form={renewForm}
+                      layout="vertical"
+                      disabled={!canRenewSelectedSubscription}
+                    >
                       <Form.Item name="expires_at" label="新的到期时间">
                         <DatePicker showTime className="w-full" />
                       </Form.Item>
@@ -1347,6 +1410,7 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                     <Button
                       type="primary"
                       icon={<SyncOutlined />}
+                      disabled={!canRenewSelectedSubscription}
                       loading={operationKey === "renew"}
                       onClick={submitRenewSubscription}
                     >
@@ -1359,7 +1423,11 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                       升降级
                     </Title>
                     <Alert type="info" showIcon className="mb-3" message="升级即时生效；降级当前周期结束后生效" />
-                    <Form<UpgradeSubscriptionFormValues> form={upgradeForm} layout="vertical">
+                    <Form<UpgradeSubscriptionFormValues>
+                      form={upgradeForm}
+                      layout="vertical"
+                      disabled={!canUpgradeSelectedSubscription}
+                    >
                       <Form.Item
                         name="plan_id"
                         label="目标 Plan"
@@ -1394,7 +1462,12 @@ function CodePlanSubscriptionsManager({ accessToken }: { accessToken?: string | 
                         <Input.TextArea rows={3} spellCheck={false} />
                       </Form.Item>
                     </Form>
-                    <Button type="primary" loading={operationKey === "upgrade"} onClick={submitUpgradeSubscription}>
+                    <Button
+                      type="primary"
+                      disabled={!canUpgradeSelectedSubscription}
+                      loading={operationKey === "upgrade"}
+                      onClick={submitUpgradeSubscription}
+                    >
                       提交升降级
                     </Button>
                   </div>
