@@ -249,15 +249,13 @@ export default function CodePlanCreditRules() {
   const previewRule = rules.find((rule) => rule.credit_rule_id === previewId) ?? rules[0];
   const previewRows = previewRule ? rowsOf(previewRule) : [];
   const previewBillingRow = previewRows.find((row) => row.model_name === STAR) ?? previewRows[0];
-  const selectedMetadataRow = previewRows.find(
-    (row) => row.model_name === previewModel && row.model_name !== STAR,
-  );
-  const previewNotice =
-    previewModel === STAR
-      ? ""
-      : selectedMetadataRow
-        ? "该模型行仅作为 metadata 保存；后端真实扣费当前仍使用 * 默认倍率。"
-        : "未配置该模型行；后端真实扣费使用 * 默认倍率。";
+  const selectedMetadataRow = previewRows.find((row) => row.model_name === previewModel && row.model_name !== STAR);
+  let previewNotice = "";
+  if (previewModel !== STAR) {
+    previewNotice = selectedMetadataRow
+      ? "该模型行仅作为 metadata 保存；后端真实扣费当前仍使用 * 默认倍率。"
+      : "未配置该模型行；后端真实扣费使用 * 默认倍率。";
+  }
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -646,9 +644,7 @@ export default function CodePlanCreditRules() {
                   <Text type="secondary">metadata 模型行：{label(selectedMetadataRow)}</Text>
                 </>
               )}
-              {previewNotice && (
-                <Alert className="mt-3" type="warning" showIcon message={previewNotice} />
-              )}
+              {previewNotice && <Alert className="mt-3" type="warning" showIcon message={previewNotice} />}
             </div>
           </div>
         </Card>
