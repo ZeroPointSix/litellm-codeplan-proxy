@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  fetchAllUsageLedgerPagesWithFetcher,
   isUsageLedgerTruncated,
   summarizeUsageLedgerEntries,
   usageLedgerMetadataReason,
@@ -40,6 +41,41 @@ describe("CodePlanUsageLedgerPage helpers", () => {
     expect(isUsageLedgerTruncated(Array.from({ length: 999 }, () => entry()))).toBe(false);
     expect(isUsageLedgerTruncated(Array.from({ length: 1000 }, () => entry()))).toBe(true);
     expect(isUsageLedgerTruncated([entry()], { hasMore: true })).toBe(true);
+  });
+
+  it("pages request chains through offset/has_more until exhausted", async () => {
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [entry({ event_id: "1", event_type: "reserve", credits: 40 })],
+        has_more: true,
+      })
+      .mockResolvedValueOnce({
+        data: [entry({ event_id: "2", event_type: "settle", credits: -36 })],
+        has_more: false,
+      });
+
+    const result = await fetchAllUsageLedgerPagesWithFetcher(fetchPage, { limit: 1 });
+
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(fetchPage).toHaveBeenNthCalledWith(1, { offset: 0, limit: 1 });
+    expect(fetchPage).toHaveBeenNthCalledWith(2, { offset: 1, limit: 1 });
+    expect(result.entries.map((row) => row.event_id)).toEqual(["1", "2"]);
+    expect(result.hasMore).toBe(false);
+    expect(result.pageCount).toBe(2);
+  });
+
+  it("stops paging at the safety max and reports hasMore", async () => {
+    const fetchPage = vi.fn().mockImplementation(async ({ offset }: { offset: number }) => ({
+      data: [entry({ event_id: `evt-${offset}` })],
+      has_more: true,
+    }));
+
+    const result = await fetchAllUsageLedgerPagesWithFetcher(fetchPage, { limit: 1, maxPages: 3 });
+
+    expect(result.pageCount).toBe(3);
+    expect(result.entries).toHaveLength(3);
+    expect(result.hasMore).toBe(true);
   });
 
   it("summarizes billable credits using settle + manual_adjust only", () => {

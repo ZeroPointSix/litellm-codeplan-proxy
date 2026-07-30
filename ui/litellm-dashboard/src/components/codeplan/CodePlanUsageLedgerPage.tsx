@@ -29,6 +29,7 @@ import {
   listCodePlanUsageLedger,
   manualAdjustCodePlanUsageLedger,
   summarizeCodePlanUsageLedger,
+  type CodePlanUsageLedgerQuery,
 } from "./codeplan_networking";
 import { CODE_PLAN_PAGE_DEFINITIONS, CodePlanBreadcrumb, CodePlanEmptyState, CodePlanErrorState } from "./CodePlanPage";
 import type {
@@ -42,6 +43,8 @@ const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
 const MAX_LEDGER_LIMIT = 1000;
+/** Safety cap so a runaway has_more loop cannot hang the browser. */
+export const MAX_LEDGER_FETCH_PAGES = 50;
 const CREDIT_USD_RATE = 0.01;
 /** Align with backend summary default: settle + manual_adjust are billable. */
 export const BILLABLE_USAGE_LEDGER_EVENT_TYPES = new Set<UsageLedgerEventType>(["settle", "manual_adjust"]);
@@ -129,6 +132,56 @@ export const usageLedgerMetadataReason = (metadata?: CodePlanUsageLedgerEntry["m
 
 export const isUsageLedgerTruncated = (entries: CodePlanUsageLedgerEntry[], options?: { hasMore?: boolean }): boolean =>
   Boolean(options?.hasMore) || entries.length >= MAX_LEDGER_LIMIT;
+
+type UsageLedgerPageFetcher = (args: {
+  offset: number;
+  limit: number;
+}) => Promise<{ data?: CodePlanUsageLedgerEntry[] | null; has_more?: boolean }>;
+
+/** Page through offset/has_more until exhausted or maxPages is hit. */
+export const fetchAllUsageLedgerPagesWithFetcher = async (
+  fetchPage: UsageLedgerPageFetcher,
+  options?: { limit?: number; maxPages?: number },
+): Promise<{ entries: CodePlanUsageLedgerEntry[]; hasMore: boolean; pageCount: number }> => {
+  const limit = options?.limit ?? MAX_LEDGER_LIMIT;
+  const maxPages = options?.maxPages ?? MAX_LEDGER_FETCH_PAGES;
+  const allRows: CodePlanUsageLedgerEntry[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+  let pageHasMore = true;
+  let pageCount = 0;
+
+  while (pageHasMore && pageCount < maxPages) {
+    const response = await fetchPage({ offset, limit });
+    const page = response.data ?? [];
+    pageCount += 1;
+    for (const row of page) {
+      if (seen.has(row.event_id)) continue;
+      seen.add(row.event_id);
+      allRows.push(row);
+    }
+    pageHasMore = Boolean(response.has_more);
+    offset += page.length;
+    if (page.length === 0) {
+      pageHasMore = false;
+      break;
+    }
+  }
+
+  return { entries: allRows, hasMore: pageHasMore, pageCount };
+};
+
+export const fetchAllUsageLedgerPages = async (
+  accessToken: string,
+  query: Omit<CodePlanUsageLedgerQuery, "offset" | "limit"> & { limit?: number | null },
+  options?: { maxPages?: number },
+): Promise<{ entries: CodePlanUsageLedgerEntry[]; hasMore: boolean; pageCount: number }> => {
+  const limit = query.limit ?? MAX_LEDGER_LIMIT;
+  return fetchAllUsageLedgerPagesWithFetcher(
+    ({ offset, limit: pageLimit }) => listCodePlanUsageLedger(accessToken, { ...query, limit: pageLimit, offset }),
+    { limit, maxPages: options?.maxPages },
+  );
+};
 
 export const summarizeUsageLedgerEntries = (
   entries: CodePlanUsageLedgerEntry[],
@@ -267,6 +320,7 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
   const [entries, setEntries] = useState<CodePlanUsageLedgerEntry[]>([]);
   const [summary, setSummary] = useState<CodePlanUsageLedgerAggregate[]>([]);
   const [chainRows, setChainRows] = useState<Record<string, CodePlanUsageLedgerEntry[]>>({});
+  const [chainHasMore, setChainHasMore] = useState<Record<string, boolean>>({});
   const [expandedKeys, setExpandedKeys] = useState<Key[]>([]);
   const [groupBy, setGroupBy] = useState<UsageLedgerGroupBy>("day");
   const [loading, setLoading] = useState(false);
@@ -295,6 +349,7 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       setSummary(summaryResponse.data ?? []);
       setExpandedKeys([]);
       setChainRows({});
+      setChainHasMore({});
     } catch (err) {
       setError(formatCodePlanError(err));
     } finally {
@@ -328,19 +383,18 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
     setExporting(true);
     try {
       const filters = currentFilters();
-      const allRows: CodePlanUsageLedgerEntry[] = [];
-      let offset = 0;
-      let pageHasMore = true;
-      while (pageHasMore) {
-        const response = await listCodePlanUsageLedger(accessToken, queryFromFilters(filters, undefined, offset));
-        const page = response.data ?? [];
-        allRows.push(...page);
-        pageHasMore = Boolean(response.has_more);
-        offset += page.length;
-        if (page.length === 0) break;
-      }
+      const { entries: allRows, hasMore: stillHasMore } = await fetchAllUsageLedgerPages(
+        accessToken,
+        queryFromFilters(filters, undefined, 0),
+      );
       downloadCsv(allRows);
-      messageApi.success(`已导出 ${allRows.length} 条流水`);
+      if (stillHasMore) {
+        messageApi.warning(
+          `已导出 ${allRows.length} 条流水，但仍有更多结果（超过 ${MAX_LEDGER_FETCH_PAGES} 页保护上限），请缩小筛选后再导出。`,
+        );
+      } else {
+        messageApi.success(`已导出 ${allRows.length} 条流水`);
+      }
     } catch (err) {
       messageApi.error(formatCodePlanError(err));
     } finally {
@@ -379,8 +433,15 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       if (!accessToken || chainRows[requestId]) return;
       setChainLoadingKey(requestId);
       try {
-        const response = await listCodePlanUsageLedger(accessToken, { request_id: requestId, limit: MAX_LEDGER_LIMIT });
-        setChainRows((current) => ({ ...current, [requestId]: response.data ?? [] }));
+        const { entries: rows, hasMore: stillHasMore } = await fetchAllUsageLedgerPages(accessToken, {
+          request_id: requestId,
+          limit: MAX_LEDGER_LIMIT,
+        });
+        setChainRows((current) => ({ ...current, [requestId]: rows }));
+        setChainHasMore((current) => ({ ...current, [requestId]: stillHasMore }));
+        if (stillHasMore) {
+          messageApi.warning(`request_id ${requestId} 链路已加载 ${rows.length} 条，但仍有更多事件（超过保护上限）。`);
+        }
       } catch (err) {
         messageApi.error(formatCodePlanError(err));
       } finally {
@@ -678,8 +739,8 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
             流水明细
           </Title>
           <Text type="secondary">
-            每次最多拉取 {MAX_LEDGER_LIMIT} 条；可用「加载更多」翻页，CSV 会按 offset 拉取全部匹配流水。点击 request_id
-            可展开同请求链路。
+            每次最多拉取 {MAX_LEDGER_LIMIT} 条；可用「加载更多」翻页，CSV / request_id 展开都会按 offset
+            翻页拉全量（有保护上限）。点击 request_id 可展开同请求链路。
           </Text>
         </div>
         {isUsageLedgerTruncated(entries, { hasMore }) ? (
@@ -711,17 +772,26 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
               if (expanded) void loadChain(record.request_id);
             },
             expandedRowRender: (record) => (
-              <Table<CodePlanUsageLedgerEntry>
-                rowKey="event_id"
-                columns={chainColumns}
-                dataSource={chainRows[record.request_id] ?? []}
-                loading={chainLoadingKey === record.request_id}
-                pagination={false}
-                size="small"
-                scroll={{ x: 1660 }}
-                rowClassName={(row) => (row.event_type === "manual_adjust" ? "bg-amber-50" : "")}
-                locale={{ emptyText: "正在读取同 request_id 链路或暂无更多事件" }}
-              />
+              <div className="flex flex-col gap-3">
+                {chainHasMore[record.request_id] ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={`同 request_id 链路已加载 ${chainRows[record.request_id]?.length ?? 0} 条，但仍有更多事件未被拉取（超过 ${MAX_LEDGER_FETCH_PAGES} 页保护上限）。`}
+                  />
+                ) : null}
+                <Table<CodePlanUsageLedgerEntry>
+                  rowKey="event_id"
+                  columns={chainColumns}
+                  dataSource={chainRows[record.request_id] ?? []}
+                  loading={chainLoadingKey === record.request_id}
+                  pagination={false}
+                  size="small"
+                  scroll={{ x: 1660 }}
+                  rowClassName={(row) => (row.event_type === "manual_adjust" ? "bg-amber-50" : "")}
+                  locale={{ emptyText: "正在读取同 request_id 链路或暂无更多事件" }}
+                />
+              </div>
             ),
           }}
           locale={{
