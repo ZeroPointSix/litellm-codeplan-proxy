@@ -25,6 +25,7 @@ DatabaseURLSettings.from_env().apply_to_env()
 
 from litellm.proxy.proxy_server import app
 
+from gateway.rate_limit import ensure_retry_after_header
 from gateway.routes.allowlist import (
     GATEWAY_EXACT_PATHS,
     GATEWAY_MOUNT_PATHS,
@@ -47,6 +48,12 @@ def _is_gateway_route(route) -> bool:
     if path in GATEWAY_EXACT_PATHS:
         return True
     return any(path.startswith(prefix) for prefix in GATEWAY_PATH_PREFIXES)
+
+
+@app.middleware("http")
+async def _gateway_rate_limit_retry_after(request, call_next):
+    response = await call_next(request)
+    return ensure_retry_after_header(response)
 
 
 # Wrap proxy_server's existing lifespan so the route trim runs *after* its

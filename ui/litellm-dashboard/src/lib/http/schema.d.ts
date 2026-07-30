@@ -13789,6 +13789,7 @@ export interface paths {
          *     - metadata: Optional[dict] - Metadata for team, store information for team. Example metadata = {"team": "core-infra", "app": "app2", "email": "ishaan@berri.ai" }
          *     - tpm_limit: Optional[int] - The TPM (Tokens Per Minute) limit for this team - all keys with this team_id will have at max this TPM limit
          *     - rpm_limit: Optional[int] - The RPM (Requests Per Minute) limit for this team - all keys associated with this team_id will have at max this RPM limit
+         *     - mcp_rpm_limit: Optional[Dict[str, int]] - Per-MCP-server RPM limit for this team, keyed by MCP server name. Example: {"github": 100, "slack": 200}.
          *     - max_budget: Optional[float] - The maximum budget allocated to the team - all keys for this team_id will have at max this max_budget
          *     - soft_budget: Optional[float] - The soft budget threshold for the team. If max_budget is set (either in the request or existing), soft_budget must be strictly lower than max_budget. Can be set independently if max_budget is not set.
          *     - budget_duration: Optional[str] - The duration of the budget for the team. Doc [here](https://docs.litellm.ai/docs/proxy/team_budgets)
@@ -15027,6 +15028,351 @@ export interface paths {
         post?: never;
         /** Delete Access Group */
         delete: operations["delete_access_group_v1_access_group__access_group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/credit-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Credit Rules */
+        get: operations["list_credit_rules_v1_admin_credit_rules_get"];
+        put?: never;
+        /** Create Credit Rule */
+        post: operations["create_credit_rule_v1_admin_credit_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Credit Rule */
+        get: operations["get_credit_rule_v1_admin_credit_rules__credit_rule_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Credit Rule */
+        patch: operations["patch_credit_rule_v1_admin_credit_rules__credit_rule_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Credit Rule */
+        post: operations["activate_credit_rule_v1_admin_credit_rules__credit_rule_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/credit-rules/{credit_rule_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Credit Rule */
+        post: operations["archive_credit_rule_v1_admin_credit_rules__credit_rule_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plans */
+        get: operations["list_plans_v1_admin_plans_get"];
+        put?: never;
+        /** Create Plan */
+        post: operations["create_plan_v1_admin_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plan */
+        get: operations["get_plan_v1_admin_plans__plan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Plan */
+        patch: operations["patch_plan_v1_admin_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Plan */
+        post: operations["activate_plan_v1_admin_plans__plan_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/plans/{plan_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive Plan */
+        post: operations["archive_plan_v1_admin_plans__plan_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Subscriptions */
+        get: operations["list_subscriptions_v1_admin_subscriptions_get"];
+        put?: never;
+        /** Create Subscription */
+        post: operations["create_subscription_v1_admin_subscriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Subscription */
+        get: operations["get_subscription_v1_admin_subscriptions__subscription_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Subscription */
+        post: operations["cancel_subscription_v1_admin_subscriptions__subscription_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/expire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Expire Subscription */
+        post: operations["expire_subscription_v1_admin_subscriptions__subscription_id__expire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Subscription Key */
+        post: operations["issue_subscription_key_v1_admin_subscriptions__subscription_id__keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/keys/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke Subscription Key */
+        post: operations["revoke_subscription_key_v1_admin_subscriptions__subscription_id__keys_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Subscription */
+        post: operations["pause_subscription_v1_admin_subscriptions__subscription_id__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renew Subscription */
+        post: operations["renew_subscription_v1_admin_subscriptions__subscription_id__renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/subscriptions/{subscription_id}/upgrade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upgrade Subscription */
+        post: operations["upgrade_subscription_v1_admin_subscriptions__subscription_id__upgrade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/usage-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Usage Ledger */
+        get: operations["list_usage_ledger_v1_admin_usage_ledger_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/usage-ledger/manual-adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manual Adjust Usage Ledger */
+        post: operations["manual_adjust_usage_ledger_v1_admin_usage_ledger_manual_adjust_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/usage-ledger/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summarize Usage Ledger */
+        get: operations["summarize_usage_ledger_v1_admin_usage_ledger_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -16725,6 +17071,127 @@ export interface paths {
          * @description List all OAuth2 MCP credentials stored for the calling user
          */
         get: operations["list_mcp_user_credentials_v1_mcp_user_credentials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/integration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Integration */
+        get: operations["get_my_integration_v1_me_integration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List My Keys */
+        get: operations["list_my_keys_v1_me_keys_get"];
+        put?: never;
+        /** Create My Key */
+        post: operations["create_my_key_v1_me_keys_post"];
+        /** Revoke My Key By Query */
+        delete: operations["revoke_my_key_by_query_v1_me_keys_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke My Key */
+        delete: operations["revoke_my_key_v1_me_keys__key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Quota */
+        get: operations["get_my_quota_v1_me_quota_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Requests */
+        get: operations["get_my_requests_v1_me_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Subscription */
+        get: operations["get_my_subscription_v1_me_subscription_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Usage */
+        get: operations["get_my_usage_v1_me_usage_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -23146,6 +23613,102 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** CreditRuleCreateRequest */
+        CreditRuleCreateRequest: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier: number;
+            /** Cache Write Multiplier */
+            cache_write_multiplier: number;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Input Multiplier */
+            input_multiplier: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Output Multiplier */
+            output_multiplier: number;
+        };
+        /** CreditRuleListResponse */
+        CreditRuleListResponse: {
+            /** Data */
+            data: components["schemas"]["CreditRuleRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** CreditRulePatchRequest */
+        CreditRulePatchRequest: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier?: number | null;
+            /** Cache Write Multiplier */
+            cache_write_multiplier?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Input Multiplier */
+            input_multiplier?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Output Multiplier */
+            output_multiplier?: number | null;
+            /** Version */
+            version: number;
+        };
+        /** CreditRuleRecord */
+        CreditRuleRecord: {
+            /** Cache Read Multiplier */
+            cache_read_multiplier: number;
+            /** Cache Write Multiplier */
+            cache_write_multiplier: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Credit Rule Id */
+            credit_rule_id: string;
+            /** Description */
+            description?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Id */
+            id: string;
+            /** Input Multiplier */
+            input_multiplier: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Output Multiplier */
+            output_multiplier: number;
+            /** @default draft */
+            status: components["schemas"]["CreditRuleStatus"];
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+        };
+        /**
+         * CreditRuleStatus
+         * @enum {string}
+         */
+        CreditRuleStatus: "draft" | "active" | "archived";
         /**
          * CustomerResponse
          * @description Customer object returned by the /customer read+write endpoints.
@@ -24026,6 +24589,8 @@ export interface components {
             key_alias?: string | null;
             /** Key Name */
             key_name?: string | null;
+            /** Key Type */
+            key_type?: string | null;
             /** Litellm Budget Table */
             litellm_budget_table?: unknown | null;
             /** Max Budget */
@@ -25026,6 +25591,8 @@ export interface components {
             key_name?: string | null;
             /** Key Rotation At */
             key_rotation_at?: string | null;
+            /** Key Type */
+            key_type?: string | null;
             /** Last Active */
             last_active?: string | null;
             /** Last Rotation At */
@@ -26414,6 +26981,8 @@ export interface components {
             key_name?: string | null;
             /** Key Rotation At */
             key_rotation_at?: string | null;
+            /** Key Type */
+            key_type?: string | null;
             /** Last Active */
             last_active?: string | null;
             /** Last Rotation At */
@@ -28376,6 +28945,8 @@ export interface components {
             key_alias?: string | null;
             /** Key Name */
             key_name?: string | null;
+            /** Key Type */
+            key_type?: string | null;
             /** Litellm Budget Table */
             litellm_budget_table?: unknown | null;
             /** Max Budget */
@@ -28844,6 +29415,193 @@ export interface components {
                 [key: string]: string;
             }[];
         };
+        /** PlanCreateRequest */
+        PlanCreateRequest: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+        };
+        /** PlanListResponse */
+        PlanListResponse: {
+            /** Data */
+            data: components["schemas"]["PlanRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** PlanPatchRequest */
+        PlanPatchRequest: {
+            /** Allowed Models */
+            allowed_models?: string[] | null;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /** Max Keys */
+            max_keys?: number | null;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Name */
+            name?: string | null;
+            /** Quota 5H */
+            quota_5h?: number | null;
+            /** Quota Weekly */
+            quota_weekly?: number | null;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+            /** Version */
+            version: number;
+        };
+        /** PlanRecord */
+        PlanRecord: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** @default draft */
+            status: components["schemas"]["PlanStatus"];
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** PlanSnapshot */
+        PlanSnapshot: {
+            /** Allowed Models */
+            allowed_models?: string[];
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at?: string;
+            /**
+             * Credit Cache Read Multiplier
+             * @default 0
+             */
+            credit_cache_read_multiplier: number;
+            /**
+             * Credit Cache Write Multiplier
+             * @default 0
+             */
+            credit_cache_write_multiplier: number;
+            /**
+             * Credit Input Multiplier
+             * @default 1
+             */
+            credit_input_multiplier: number;
+            /**
+             * Credit Output Multiplier
+             * @default 1
+             */
+            credit_output_multiplier: number;
+            /** Credit Rule Id */
+            credit_rule_id?: string | null;
+            /** Credit Rule Version */
+            credit_rule_version?: number | null;
+            /** Default Max Output Tokens */
+            default_max_output_tokens?: number | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Max Keys
+             * @default 5
+             */
+            max_keys: number;
+            /** Max Parallel Requests */
+            max_parallel_requests?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Plan Id */
+            plan_id: string;
+            /** Plan Version */
+            plan_version: number;
+            /** Quota 5H */
+            quota_5h: number;
+            /** Quota Weekly */
+            quota_weekly: number;
+            /** Rpm Limit */
+            rpm_limit?: number | null;
+            /** Tpm Limit */
+            tpm_limit?: number | null;
+        };
+        /**
+         * PlanStatus
+         * @enum {string}
+         */
+        PlanStatus: "draft" | "active" | "archived";
         /**
          * PluginAuthor
          * @description Plugin author information.
@@ -29550,6 +30308,268 @@ export interface components {
              * @description New status: 'published' or 'production'.
              */
             version_status: string;
+        };
+        /** PortalIntegrationResponse */
+        PortalIntegrationResponse: {
+            /** Allowed Models */
+            allowed_models: string[];
+            /** Allowed Routes */
+            allowed_routes: string[];
+            /** Api Base Url */
+            api_base_url: string;
+            /** Base Url */
+            base_url: string;
+            /** Project Id */
+            project_id: string;
+            /** Sample Config */
+            sample_config: {
+                [key: string]: unknown;
+            };
+            /** Subscription Id */
+            subscription_id: string;
+        };
+        /** PortalKeyCreateRequest */
+        PortalKeyCreateRequest: {
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        /** PortalKeyCreateResponse */
+        PortalKeyCreateResponse: {
+            /** Key */
+            key: string;
+            /** Key Id */
+            key_id: string;
+            subscription: components["schemas"]["PortalSubscription"];
+            /** Token Id */
+            token_id: string;
+        };
+        /** PortalKeyListResponse */
+        PortalKeyListResponse: {
+            /** Data */
+            data: components["schemas"]["PortalKeyRecord"][];
+            /** Project Id */
+            project_id: string;
+            /** Subscription Id */
+            subscription_id: string;
+        };
+        /** PortalKeyRecord */
+        PortalKeyRecord: {
+            /** Allowed Routes */
+            allowed_routes: string[];
+            /**
+             * Blocked
+             * @default false
+             */
+            blocked: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Key Id */
+            key_id: string;
+            /** Last Active */
+            last_active?: string | null;
+            /** Models */
+            models: string[];
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** PortalKeyRevokeResponse */
+        PortalKeyRevokeResponse: {
+            /** Revoked Key Id */
+            revoked_key_id: string;
+            subscription: components["schemas"]["PortalSubscription"];
+        };
+        /** PortalQuotaResponse */
+        PortalQuotaResponse: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Generated At Local */
+            generated_at_local: string;
+            /** Project Id */
+            project_id: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Timezone */
+            timezone: string;
+            /** Windows */
+            windows: components["schemas"]["PortalQuotaWindow"][];
+        };
+        /** PortalQuotaWindow */
+        PortalQuotaWindow: {
+            /** Anchor At */
+            anchor_at?: string | null;
+            /** Anchor At Local */
+            anchor_at_local?: string | null;
+            /** Limit */
+            limit: number;
+            /** Name */
+            name: string;
+            /** Period Id */
+            period_id: string;
+            /** Remaining */
+            remaining: number;
+            /**
+             * Reset At
+             * Format: date-time
+             */
+            reset_at: string;
+            /** Reset At Local */
+            reset_at_local: string;
+            /** Seconds Until Reset */
+            seconds_until_reset: number;
+            /**
+             * Starts On First Success
+             * @default false
+             */
+            starts_on_first_success: boolean;
+            /** Used */
+            used: number;
+        };
+        /** PortalRequestListResponse */
+        PortalRequestListResponse: {
+            /** Data */
+            data: components["schemas"]["PortalRequestRecord"][];
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Total */
+            total: number;
+            /** Total Pages */
+            total_pages: number;
+        };
+        /** PortalRequestRecord */
+        PortalRequestRecord: {
+            /** Api Base */
+            api_base?: string | null;
+            /** Cache Hit */
+            cache_hit?: boolean | string | null;
+            /** Call Type */
+            call_type?: string | null;
+            /** End Time */
+            end_time?: string | null;
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Model */
+            model?: string | null;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Duration Ms */
+            request_duration_ms?: number | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Start Time */
+            start_time?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** PortalSubscription */
+        PortalSubscription: {
+            /** Created At */
+            created_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Key Count */
+            key_count: number;
+            /** Max Keys */
+            max_keys: number;
+            /** Plan Id */
+            plan_id: string;
+            plan_snapshot: components["schemas"]["PlanSnapshot"];
+            /** Project Id */
+            project_id: string;
+            /** Renewed At */
+            renewed_at?: string | null;
+            /** Status */
+            status: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Version */
+            version: number;
+        };
+        /** PortalSubscriptionResponse */
+        PortalSubscriptionResponse: {
+            subscription: components["schemas"]["PortalSubscription"];
+        };
+        /** PortalUsageBucket */
+        PortalUsageBucket: {
+            /** Date */
+            date: string;
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Count */
+            request_count: number;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** PortalUsageResponse */
+        PortalUsageResponse: {
+            /** Buckets */
+            buckets: components["schemas"]["PortalUsageBucket"][];
+            /**
+             * End Time
+             * Format: date-time
+             */
+            end_time: string;
+            /** Project Id */
+            project_id: string;
+            /**
+             * Start Time
+             * Format: date-time
+             */
+            start_time: string;
+            /** Subscription Id */
+            subscription_id: string;
+            /** Timezone */
+            timezone: string;
+            totals: components["schemas"]["PortalUsageTotals"];
+        };
+        /** PortalUsageTotals */
+        PortalUsageTotals: {
+            /** External Credits */
+            external_credits: number;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Request Count */
+            request_count: number;
+            /** Total Tokens */
+            total_tokens: number;
         };
         /** Prompt */
         Prompt: {
@@ -30857,6 +31877,154 @@ export interface components {
              * @default 0
              */
             total_tokens: number;
+        };
+        /** SubscriptionActionRequest */
+        SubscriptionActionRequest: {
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionCreateRequest */
+        SubscriptionCreateRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plan Id */
+            plan_id: string;
+            /** Project Id */
+            project_id: string;
+        };
+        /** SubscriptionIssueKeyRequest */
+        SubscriptionIssueKeyRequest: {
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionListResponse */
+        SubscriptionListResponse: {
+            /** Data */
+            data: components["schemas"]["SubscriptionRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** SubscriptionProvisionResponse */
+        SubscriptionProvisionResponse: {
+            /** Key */
+            key?: string | null;
+            /** Key Id */
+            key_id?: string | null;
+            subscription: components["schemas"]["SubscriptionRecord"];
+            /** Token Id */
+            token_id?: string | null;
+        };
+        /** SubscriptionRecord */
+        SubscriptionRecord: {
+            /** Canceled At */
+            canceled_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Litellm Key Ids */
+            litellm_key_ids?: string[];
+            /** Litellm Team Id */
+            litellm_team_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Paused At */
+            paused_at?: string | null;
+            /** Plan Id */
+            plan_id: string;
+            plan_snapshot: components["schemas"]["PlanSnapshot"];
+            /** Project Id */
+            project_id: string;
+            /** Renewed At */
+            renewed_at?: string | null;
+            /** @default active */
+            status: components["schemas"]["SubscriptionStatus"];
+            /** Subscription Id */
+            subscription_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Updated By */
+            updated_by?: string | null;
+            /** Version */
+            version: number;
+            /** Window 5H Start */
+            window_5h_start?: string | null;
+            /** Window Week Start */
+            window_week_start?: string | null;
+        };
+        /** SubscriptionRenewRequest */
+        SubscriptionRenewRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Version */
+            version: number;
+        };
+        /** SubscriptionRevokeKeyRequest */
+        SubscriptionRevokeKeyRequest: {
+            /** Key Id */
+            key_id: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * SubscriptionStatus
+         * @enum {string}
+         */
+        SubscriptionStatus: "active" | "paused" | "canceled" | "expired";
+        /** SubscriptionUpgradeRequest */
+        SubscriptionUpgradeRequest: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Issue Key
+             * @default true
+             */
+            issue_key: boolean;
+            /** Key Alias */
+            key_alias?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plan Id */
+            plan_id: string;
+            /** Version */
+            version: number;
         };
         /**
          * SuccessfulKeyUpdate
@@ -32643,6 +33811,184 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** UsageLedgerAggregateRecord */
+        UsageLedgerAggregateRecord: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
+             * Credits
+             * @default 0
+             */
+            credits: number;
+            /**
+             * Event Count
+             * @default 0
+             */
+            event_count: number;
+            /** Group */
+            group: string;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Request Count
+             * @default 0
+             */
+            request_count: number;
+        };
+        /** UsageLedgerAggregateResponse */
+        UsageLedgerAggregateResponse: {
+            /** Data */
+            data: components["schemas"]["UsageLedgerAggregateRecord"][];
+            group_by: components["schemas"]["UsageLedgerGroupBy"];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /**
+         * UsageLedgerEventType
+         * @enum {string}
+         */
+        UsageLedgerEventType: "reserve" | "settle" | "release" | "refund" | "manual_adjust" | "compensate" | "expire" | "pending_usage";
+        /**
+         * UsageLedgerGroupBy
+         * @enum {string}
+         */
+        UsageLedgerGroupBy: "hour" | "day" | "model" | "user";
+        /** UsageLedgerListResponse */
+        UsageLedgerListResponse: {
+            /** Data */
+            data: components["schemas"]["UsageLedgerRecord"][];
+            /**
+             * Object
+             * @default list
+             */
+            object: string;
+        };
+        /** UsageLedgerManualAdjustRequest */
+        UsageLedgerManualAdjustRequest: {
+            /** Credits */
+            credits: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Rule Version
+             * @default 1
+             */
+            rule_version: number;
+            /** Subscription Id */
+            subscription_id: string;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** UsageLedgerRecord */
+        UsageLedgerRecord: {
+            /** Api Key Id */
+            api_key_id?: string | null;
+            /**
+             * Cache Read Multiplier
+             * @default 0
+             */
+            cache_read_multiplier: number;
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Multiplier
+             * @default 0
+             */
+            cache_write_multiplier: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Credits */
+            credits: number;
+            /** Event Id */
+            event_id: string;
+            event_type: components["schemas"]["UsageLedgerEventType"];
+            /**
+             * Input Multiplier
+             * @default 1
+             */
+            input_multiplier: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /**
+             * Output Multiplier
+             * @default 1
+             */
+            output_multiplier: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /** Project Id */
+            project_id?: string | null;
+            /** Request Id */
+            request_id: string;
+            /**
+             * Rule Version
+             * @default 1
+             */
+            rule_version: number;
+            /** Subscription Id */
+            subscription_id: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Window 5H End */
+            window_5h_end?: string | null;
+            /** Window 5H Period Id */
+            window_5h_period_id?: string | null;
+            /** Window 5H Start */
+            window_5h_start?: string | null;
+            /** Window Week End */
+            window_week_end?: string | null;
+            /** Window Week Period Id */
+            window_week_period_id?: string | null;
+            /** Window Week Start */
+            window_week_start?: string | null;
+        };
         /** UsageLogEntry */
         UsageLogEntry: {
             /** Action */
@@ -32810,6 +34156,8 @@ export interface components {
             key_name?: string | null;
             /** Key Rotation At */
             key_rotation_at?: string | null;
+            /** Key Type */
+            key_type?: string | null;
             /** Last Active */
             last_active?: string | null;
             /** Last Refreshed At */
@@ -52061,6 +53409,853 @@ export interface operations {
             };
         };
     };
+    list_credit_rules_v1_admin_credit_rules_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["CreditRuleStatus"] | null;
+                credit_rule_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_credit_rule_v1_admin_credit_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditRuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_credit_rule_v1_admin_credit_rules__credit_rule_id__get: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_credit_rule_v1_admin_credit_rules__credit_rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditRulePatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_credit_rule_v1_admin_credit_rules__credit_rule_id__activate_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_credit_rule_v1_admin_credit_rules__credit_rule_id__archive_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                credit_rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRuleRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_plans_v1_admin_plans_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PlanStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_plan_v1_admin_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plan_v1_admin_plans__plan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plan_v1_admin_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_plan_v1_admin_plans__plan_id__activate_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_plan_v1_admin_plans__plan_id__archive_post: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_subscriptions_v1_admin_subscriptions_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SubscriptionStatus"] | null;
+                project_id?: string | null;
+                plan_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_subscription_v1_admin_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subscription_v1_admin_subscriptions__subscription_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_subscription_v1_admin_subscriptions__subscription_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    expire_subscription_v1_admin_subscriptions__subscription_id__expire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_subscription_key_v1_admin_subscriptions__subscription_id__keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionIssueKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_subscription_key_v1_admin_subscriptions__subscription_id__keys_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionRevokeKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_subscription_v1_admin_subscriptions__subscription_id__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_subscription_v1_admin_subscriptions__subscription_id__renew_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionRenewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upgrade_subscription_v1_admin_subscriptions__subscription_id__upgrade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                subscription_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscriptionUpgradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionProvisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_usage_ledger_v1_admin_usage_ledger_get: {
+        parameters: {
+            query?: {
+                subscription_id?: string | null;
+                project_id?: string | null;
+                user_id?: string | null;
+                model?: string | null;
+                event_type?: components["schemas"]["UsageLedgerEventType"] | null;
+                start_time?: string | null;
+                end_time?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    manual_adjust_usage_ledger_v1_admin_usage_ledger_manual_adjust_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageLedgerManualAdjustRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_usage_ledger_v1_admin_usage_ledger_summary_get: {
+        parameters: {
+            query?: {
+                group_by?: components["schemas"]["UsageLedgerGroupBy"];
+                subscription_id?: string | null;
+                project_id?: string | null;
+                user_id?: string | null;
+                model?: string | null;
+                event_type?: components["schemas"]["UsageLedgerEventType"] | null;
+                start_time?: string | null;
+                end_time?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageLedgerAggregateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agents_v1_agents_get: {
         parameters: {
             query?: {
@@ -54793,6 +56988,259 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MCPUserCredentialListItem"][];
+                };
+            };
+        };
+    };
+    get_my_integration_v1_me_integration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIntegrationResponse"];
+                };
+            };
+        };
+    };
+    list_my_keys_v1_me_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyListResponse"];
+                };
+            };
+        };
+    };
+    create_my_key_v1_me_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_my_key_by_query_v1_me_keys_delete: {
+        parameters: {
+            query: {
+                key_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_my_key_v1_me_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalKeyRevokeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_quota_v1_me_quota_get: {
+        parameters: {
+            query?: {
+                timezone?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalQuotaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_requests_v1_me_requests_get: {
+        parameters: {
+            query?: {
+                start_time?: string | null;
+                end_time?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalRequestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_subscription_v1_me_subscription_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalSubscriptionResponse"];
+                };
+            };
+        };
+    };
+    get_my_usage_v1_me_usage_get: {
+        parameters: {
+            query?: {
+                timezone?: string;
+                start_time?: string | null;
+                end_time?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalUsageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -93,6 +93,23 @@ jobs:
             dist: loadscope
             timeout: 20
 
+          # ---- Code Plan product module ----
+          - test-group: code-plan
+            test-path: >-
+              tests/proxy_unit_tests/test_code_plan_gateway.py
+              tests/proxy_unit_tests/test_code_plan_plans.py
+              tests/proxy_unit_tests/test_code_plan_credit_rules.py
+              tests/proxy_unit_tests/test_code_plan_credit_rules_api.py
+              tests/proxy_unit_tests/test_code_plan_subscriptions.py
+              tests/proxy_unit_tests/test_code_plan_subscriptions_api.py
+              tests/proxy_unit_tests/test_code_plan_quotas.py
+              tests/proxy_unit_tests/test_code_plan_notion_regressions.py
+              tests/proxy_unit_tests/test_code_plan_usage_ledger.py
+              tests/proxy_unit_tests/test_code_plan_portal_api.py
+            workers: 0
+            dist: loadscope
+            timeout: 10
+
           # ---- auth: split into 2 shards ----
           - test-group: auth-checks
             test-path: >-

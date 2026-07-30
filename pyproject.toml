@@ -61,7 +61,7 @@ proxy = [
     "boto3>=1.43.1,<2.0",
     "azure-identity>=1.25.2,<2.0",
     "azure-storage-blob>=12.28.0,<13.0",
-    "mcp>=1.26.0,<2.0",
+    "mcp>=1.28.1,<2.0",
     "litellm-proxy-extras==0.4.76",
     "litellm-enterprise==0.1.49",
     "RestrictedPython>=8.1,<9.0",
@@ -129,12 +129,12 @@ proxy-runtime = [
     "opentelemetry-sdk==1.28.0",
     "opentelemetry-exporter-otlp==1.28.0",
     "opentelemetry-instrumentation-fastapi==0.49b0",
-    "ddtrace>=2.19.0,<3.0",
+    "ddtrace>=4.8.2,<5.0",
     "sentry-sdk>=2.21.0,<3.0",
     "mangum>=0.17.0,<1.0",
     "azure-ai-contentsafety>=1.0.0,<2.0",
     "azure-storage-file-datalake>=12.20.0,<13.0",
-    "pypdf>=6.12.0,<7.0; python_version < '3.14'",
+    "pypdf>=6.14.2,<7.0; python_version < '3.14'",
     "llm-sandbox>=0.3.39,<1.0",
     "detect-secrets>=1.5.0,<2.0",
 ]
@@ -205,7 +205,7 @@ ci = [
     # protobuf, Pillow is a compiled C extension).
     "tenacity==8.5.0",
     "google-generativeai==0.8.6",
-    "Pillow==12.2.0",
+    "Pillow==12.3.0",
     # Azure batch E2E tests still import psycopg2 directly.
     "psycopg2-binary==2.9.11",
     "pytest-codspeed==4.3.0",

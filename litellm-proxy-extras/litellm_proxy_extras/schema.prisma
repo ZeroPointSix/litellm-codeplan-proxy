@@ -157,6 +157,123 @@ model LiteLLM_TeamTable {
 }
 
 // Projects sit between teams and keys for use-case management
+model LiteLLM_CodePlanTable {
+  plan_id                   String   @id @default(uuid())
+  name                      String   @unique
+  description               String?
+  status                    String   @default("draft")
+  quota_5h                  Int
+  quota_weekly              Int
+  allowed_models            String[] @default([])
+  rpm_limit                 BigInt?
+  tpm_limit                 BigInt?
+  max_parallel_requests     Int?
+  max_keys                  Int      @default(5)
+  default_max_output_tokens Int?
+  credit_rule_id            String?
+  metadata                  Json     @default("{}")
+  version                   Int      @default(1)
+  created_at                DateTime @default(now()) @map("created_at")
+  created_by                String?
+  updated_at                DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by                String?
+
+  @@index([status])
+  @@index([created_at])
+}
+
+model LiteLLM_CodePlanSubscriptionTable {
+  subscription_id String   @id @default(uuid())
+  project_id      String
+  plan_id         String
+  status          String   @default("active")
+  plan_snapshot   Json
+  litellm_team_id String?
+  litellm_key_ids String[] @default([])
+  expires_at      DateTime?
+  renewed_at      DateTime?
+  paused_at       DateTime?
+  canceled_at     DateTime?
+  window_5h_start DateTime?
+  window_week_start DateTime?
+  metadata        Json     @default("{}")
+  version         Int      @default(1)
+  created_at      DateTime @default(now()) @map("created_at")
+  created_by      String?
+  updated_at      DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by      String?
+
+  @@index([project_id])
+  @@index([plan_id])
+  @@index([status])
+  @@index([litellm_team_id])
+  @@index([expires_at])
+  @@index([created_at])
+}
+
+model LiteLLM_CodePlanUsageLedgerTable {
+  event_id               String   @id @default(uuid())
+  request_id             String
+  subscription_id        String
+  project_id             String?
+  user_id                String?
+  api_key_id             String?
+  model                  String?
+  event_type             String
+  credits                Float
+  input_tokens           Int      @default(0)
+  output_tokens          Int      @default(0)
+  cache_read_tokens      Int      @default(0)
+  cache_write_tokens     Int      @default(0)
+  input_multiplier       Float    @default(1.0)
+  output_multiplier      Float    @default(1.0)
+  cache_read_multiplier  Float    @default(0.0)
+  cache_write_multiplier Float    @default(0.0)
+  rule_version           Int      @default(1)
+  window_5h_period_id    String?
+  window_5h_start        DateTime?
+  window_5h_end          DateTime?
+  window_week_period_id  String?
+  window_week_start      DateTime?
+  window_week_end        DateTime?
+  metadata               Json     @default("{}")
+  created_at             DateTime @default(now()) @map("created_at")
+
+  @@unique([subscription_id, request_id, event_type])
+  @@index([subscription_id, created_at])
+  @@index([project_id, created_at])
+  @@index([user_id, created_at])
+  @@index([model, created_at])
+  @@index([event_type, created_at])
+  @@index([request_id])
+  @@index([created_at])
+}
+
+model LiteLLM_CreditRuleTable {
+  id                     String   @id @default(uuid())
+  credit_rule_id         String   @default(uuid())
+  name                   String
+  description            String?
+  status                 String   @default("draft")
+  input_multiplier       Float
+  output_multiplier      Float
+  cache_read_multiplier  Float
+  cache_write_multiplier Float
+  effective_at           DateTime?
+  metadata               Json     @default("{}")
+  version                Int      @default(1)
+  created_at             DateTime @default(now()) @map("created_at")
+  created_by             String?
+  updated_at             DateTime @default(now()) @updatedAt @map("updated_at")
+  updated_by             String?
+
+  @@unique([credit_rule_id, version])
+  @@index([credit_rule_id])
+  @@index([status])
+  @@index([effective_at])
+  @@index([created_at])
+}
+
 model LiteLLM_ProjectTable {
   project_id           String   @id @default(uuid())
   project_alias        String?
@@ -422,6 +539,7 @@ model LiteLLM_VerificationToken {
     budget_reset_at DateTime?
     allowed_cache_controls String[] @default([])
     allowed_routes   String[] @default([])
+    key_type         String?
     policies         String[] @default([])
     access_group_ids String[] @default([])
     model_spend      Json @default("{}")
@@ -516,6 +634,7 @@ model LiteLLM_DeletedVerificationToken {
     budget_reset_at         DateTime?
     allowed_cache_controls  String[] @default([])
     allowed_routes          String[] @default([])
+    key_type                String?
     policies                String[] @default([])
     access_group_ids String[] @default([])
     model_spend             Json     @default("{}")

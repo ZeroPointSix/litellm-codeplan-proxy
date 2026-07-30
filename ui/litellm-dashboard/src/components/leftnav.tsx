@@ -7,9 +7,9 @@ import { getProxyBaseUrl } from "@/components/networking";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
-  SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
@@ -69,6 +69,7 @@ import {
   internalUserRoles,
   isAdminRole,
   isUserTeamAdminForAnyTeam,
+  proxyAdminRoles,
   rolesAllowedToViewWriteScopedPages,
   rolesWithWriteAccess,
 } from "../utils/roles";
@@ -236,6 +237,40 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    groupLabel: "CODE PLAN",
+    roles: proxyAdminRoles,
+    items: [
+      {
+        key: "codeplan-plans",
+        page: "codeplan-plans",
+        label: "套餐管理",
+        icon: <Wallet {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-credit-rules",
+        page: "codeplan-credit-rules",
+        label: "计费规则",
+        icon: <ScrollText {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-subscriptions",
+        page: "codeplan-subscriptions",
+        label: "订阅管理",
+        icon: <Users {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+      {
+        key: "codeplan-usage-ledger",
+        page: "codeplan-usage-ledger",
+        label: "用量账本",
+        icon: <Activity {...ICON} />,
+        roles: proxyAdminRoles,
+      },
+    ],
+  },
+  {
     groupLabel: "DEVELOPER TOOLS",
     items: [
       { key: "api_ref", page: "api_ref", label: "API Reference", icon: <Code2 {...ICON} /> },
@@ -357,6 +392,7 @@ const SECTION_DISPLAY: Record<string, string> = {
   "AI GATEWAY": "AI Gateway",
   OBSERVABILITY: "Observability",
   "ACCESS CONTROL": "Access Control",
+  "CODE PLAN": "Code Plan",
   "DEVELOPER TOOLS": "Developer Tools",
   SETTINGS: "Settings",
 };
@@ -608,15 +644,17 @@ const Sidebar_: React.FC<SidebarProps> = ({
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        {visibleGroups.map((group, gi) => (
-          <SidebarGroup key={group.groupLabel}>
-            {gi > 0 && <SidebarSeparator className="hidden group-data-[collapsed=true]/sidebar:block" />}
-            <SidebarGroupLabel>{group.groupLabel}</SidebarGroupLabel>
-            <SidebarMenu>{group.items.map((item) => renderItem(item))}</SidebarMenu>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
+      <ScrollArea className="min-h-0 flex-1">
+        <nav className="flex flex-col gap-0.5 px-3 pb-3">
+          {visibleGroups.map((group, gi) => (
+            <SidebarGroup key={group.groupLabel}>
+              {gi > 0 && <SidebarSeparator className="hidden group-data-[collapsed=true]/sidebar:block" />}
+              <SidebarGroupLabel>{group.groupLabel}</SidebarGroupLabel>
+              <SidebarMenu>{group.items.map((item) => renderItem(item))}</SidebarMenu>
+            </SidebarGroup>
+          ))}
+        </nav>
+      </ScrollArea>
 
       <SidebarFooter>
         {isAdminRole(userRole) && (

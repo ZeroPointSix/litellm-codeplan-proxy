@@ -113,6 +113,18 @@ class MCPToolsetRepository(PrismaTableRepository):
     table_name = "litellm_mcptoolsettable"
 
 
+class CodePlanRepository(PrismaTableRepository):
+    table_name = "litellm_codeplantable"
+
+
+class CodePlanSubscriptionRepository(PrismaTableRepository):
+    table_name = "litellm_codeplansubscriptiontable"
+
+
+class CreditRuleTableRepository(PrismaTableRepository):
+    table_name = "litellm_creditruletable"
+
+
 class ToolRepository(PrismaTableRepository):
     table_name = "litellm_tooltable"
 

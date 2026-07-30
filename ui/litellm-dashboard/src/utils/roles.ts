@@ -7,6 +7,7 @@ export const all_admin_roles = [...old_admin_roles, ...v2_admin_role_names];
 
 export const internalUserRoles = ["Internal User", "Internal Viewer", "internal_user", "internal_user_viewer"];
 export const rolesAllowedToSeeUsage = ["Admin", "Admin Viewer", "Internal User", "Internal Viewer"];
+export const proxyAdminRoles = ["Admin", "proxy_admin"];
 export const rolesWithWriteAccess = ["Internal User", "Admin", "proxy_admin"];
 // Admin-tier read parity: Admin Viewer sees Models + Endpoints, Agents, and
 // other pages whose primary purpose is configuration/management read-only.
@@ -20,7 +21,7 @@ export const isAdminRole = (role: string): boolean => {
 };
 
 export const isProxyAdminRole = (role: string): boolean => {
-  return role === "proxy_admin" || role === "Admin";
+  return proxyAdminRoles.includes(role);
 };
 
 export const isUserTeamAdminForAnyTeam = (teams: Team[] | null, userID: string): boolean => {

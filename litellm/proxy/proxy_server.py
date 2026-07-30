@@ -357,6 +357,10 @@ from litellm.proxy.logging_endpoints.callback_logs_endpoints import (
 from litellm.proxy.management_endpoints.budget_management_endpoints import (
     router as budget_management_router,
 )
+from litellm.product.credit_rules.router import router as credit_rule_router
+from litellm.product.plans.router import router as code_plan_router
+from litellm.product.subscriptions.router import router as code_plan_subscription_router
+from litellm.product.usage_ledger.router import router as code_plan_usage_ledger_router
 from litellm.proxy.management_endpoints.cache_settings_endpoints import (
     router as cache_settings_router,
 )
@@ -7271,7 +7275,7 @@ async def async_data_generator(
         # disconnect, so it fires reliably regardless of needs_iterator_wrap
         # (a nested iterator hook would only see GeneratorExit on GC).
         if not stream_completed:
-            proxy_logging_obj._release_max_parallel_requests_on_disconnect(user_api_key_dict)
+            proxy_logging_obj._release_max_parallel_requests_on_disconnect(user_api_key_dict, request_data)
             client_disconnected = True
         raise
     except Exception as e:
@@ -7882,7 +7886,7 @@ class ProxyStartupEvent:
                     proxy_logging_obj=proxy_logging_obj,
                     prisma_client=prisma_client,
                     llm_router=llm_router,
-                    track_unmanaged_vertex_batch_cost=general_settings.get("track_unmanaged_vertex_batch_cost", False),
+                    track_unmanaged_batch_cost=general_settings.get("track_unmanaged_batch_cost", False),
                 )
                 scheduler.add_job(
                     check_batch_cost_job.check_batch_cost,
@@ -15987,6 +15991,10 @@ app.include_router(ui_crud_endpoints_router)
 app.include_router(team_callback_router)
 app.include_router(budget_management_router)
 app.include_router(model_management_router)
+app.include_router(credit_rule_router)
+app.include_router(code_plan_router)
+app.include_router(code_plan_subscription_router)
+app.include_router(code_plan_usage_ledger_router)
 app.include_router(model_access_group_management_router)
 app.include_router(tag_management_router)
 app.include_router(workflow_management_router)
