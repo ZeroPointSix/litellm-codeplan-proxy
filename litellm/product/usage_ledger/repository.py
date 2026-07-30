@@ -52,6 +52,7 @@ class UsageLedgerRepository:
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[UsageLedgerRecord]:
         where = self._where(
             request_id=request_id,
@@ -63,7 +64,12 @@ class UsageLedgerRepository:
             start_time=start_time,
             end_time=end_time,
         )
-        records = await self.table.find_many(where=where, order={"created_at": "desc"}, take=limit)
+        records = await self.table.find_many(
+            where=where,
+            order={"created_at": "desc"},
+            take=limit,
+            skip=max(offset, 0),
+        )
         return [self._to_model(record) for record in records]
 
     async def aggregate(

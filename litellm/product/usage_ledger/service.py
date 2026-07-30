@@ -99,6 +99,7 @@ class UsageLedgerService:
         start_time: datetime | None = None,
         end_time: datetime | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[UsageLedgerRecord]:
         return await self.repository.list(
             request_id=request_id,
@@ -110,6 +111,7 @@ class UsageLedgerService:
             start_time=start_time,
             end_time=end_time,
             limit=limit,
+            offset=offset,
         )
 
     async def aggregate_events(
@@ -151,25 +153,40 @@ class UsageLedgerService:
     async def manual_adjust(self, data: UsageLedgerManualAdjustRequest) -> UsageLedgerRecord:
         adjustment = await self._adjust_quota(data)
         windows = adjustment.windows if adjustment is not None else []
-        record = await self.repository.create(
-            UsageLedgerCreate(
-                request_id=data.request_id,
-                subscription_id=data.subscription_id,
-                project_id=data.project_id,
-                user_id=data.user_id,
-                model=data.model,
-                event_type=UsageLedgerEventType.MANUAL_ADJUST,
-                credits=data.credits,
-                rule_version=data.rule_version,
-                window_5h_period_id=self._window_period_id(windows, "5h"),
-                window_5h_start=self._window_start(windows, "5h"),
-                window_5h_end=self._window_end(windows, "5h"),
-                window_week_period_id=self._window_period_id(windows, "week"),
-                window_week_start=self._window_start(windows, "week"),
-                window_week_end=self._window_end(windows, "week"),
-                metadata=self._manual_adjust_metadata(data, adjustment),
+        try:
+            record = await self.repository.create(
+                UsageLedgerCreate(
+                    request_id=data.request_id,
+                    subscription_id=data.subscription_id,
+                    project_id=data.project_id,
+                    user_id=data.user_id,
+                    model=data.model,
+                    event_type=UsageLedgerEventType.MANUAL_ADJUST,
+                    credits=data.credits,
+                    rule_version=data.rule_version,
+                    window_5h_period_id=self._window_period_id(windows, "5h"),
+                    window_5h_start=self._window_start(windows, "5h"),
+                    window_5h_end=self._window_end(windows, "5h"),
+                    window_week_period_id=self._window_period_id(windows, "week"),
+                    window_week_start=self._window_start(windows, "week"),
+                    window_week_end=self._window_end(windows, "week"),
+                    metadata=self._manual_adjust_metadata(data, adjustment),
+                )
             )
-        )
+        except Exception:
+            if adjustment is not None and self.quota_service is not None:
+                try:
+                    await self.quota_service.manual_adjust(
+                        subscription_id=data.subscription_id,
+                        request_id=f"{data.request_id}-rollback",
+                        windows=adjustment.windows,
+                        credits=-data.credits,
+                    )
+                except Exception as rollback_exc:
+                    raise RuntimeError(
+                        "manual_adjust ledger write failed and quota rollback also failed"
+                    ) from rollback_exc
+            raise
         await self.repository.update_subscription_windows(
             subscription_id=record.subscription_id,
             window_5h_start=record.window_5h_start,

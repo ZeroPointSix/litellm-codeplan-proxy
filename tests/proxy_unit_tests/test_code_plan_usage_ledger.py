@@ -222,3 +222,58 @@ async def test_usage_ledger_list_filters_by_request_id():
 
     assert repository.lists[0]["request_id"] == "req-chain"
     assert repository.lists[0]["limit"] == 1000
+    assert repository.lists[0]["offset"] == 0
+
+
+@pytest.mark.asyncio
+async def test_usage_ledger_list_supports_offset_pagination():
+    repository = _UsageLedgerRepository()
+    service = UsageLedgerService(repository)
+
+    await service.list_events(subscription_id="sub-page", limit=1000, offset=1000)
+
+    assert repository.lists[0]["subscription_id"] == "sub-page"
+    assert repository.lists[0]["limit"] == 1000
+    assert repository.lists[0]["offset"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_usage_ledger_manual_adjust_rolls_back_quota_when_ledger_write_fails():
+    class _FailingCreateRepository(_UsageLedgerRepository):
+        async def create(self, data):
+            raise RuntimeError("db write failed")
+
+    repository = _FailingCreateRepository()
+    anchor = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
+    windows = [_window("5h", anchor, 18_000), _window("week", anchor, 604_800)]
+    quota_service = _ManualAdjustQuotaService(
+        QuotaAdjustmentResult(
+            subscription_id="sub-manual",
+            request_id="manual-rollback",
+            credits=10,
+            balances_before={"5h": 80, "week": 400},
+            balances_after={"5h": 90, "week": 410},
+            windows=windows,
+        )
+    )
+    repository.subscription_metadata["sub-manual"] = {
+        "code_plan_quota_5h": 100,
+        "code_plan_quota_weekly": 500,
+        "code_plan_week_anchor_epoch": anchor,
+    }
+    service = UsageLedgerService(repository, quota_service=quota_service)
+
+    with pytest.raises(RuntimeError, match="db write failed"):
+        await service.manual_adjust(
+            UsageLedgerManualAdjustRequest(
+                subscription_id="sub-manual",
+                request_id="manual-rollback",
+                credits=10,
+                reason="support credit",
+            )
+        )
+
+    assert len(quota_service.calls) == 2
+    assert quota_service.calls[0]["credits"] == 10
+    assert quota_service.calls[1]["credits"] == -10
+    assert quota_service.calls[1]["request_id"] == "manual-rollback-rollback"

@@ -98,10 +98,12 @@ async def list_usage_ledger(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> UsageLedgerListResponse:
     _require_proxy_admin(user_api_key_dict)
     service = _get_service()
-    records = await service.list_events(
+    # Fetch one extra row to detect whether another page exists without a full COUNT.
+    page = await service.list_events(
         request_id=request_id,
         subscription_id=subscription_id,
         project_id=project_id,
@@ -110,9 +112,12 @@ async def list_usage_ledger(
         event_type=event_type,
         start_time=start_time,
         end_time=end_time,
-        limit=limit,
+        limit=limit + 1,
+        offset=offset,
     )
-    return UsageLedgerListResponse(data=records)
+    has_more = len(page) > limit
+    records = page[:limit]
+    return UsageLedgerListResponse(data=records, has_more=has_more, limit=limit, offset=offset)
 
 
 @router.get("/summary", response_model=UsageLedgerAggregateResponse)
@@ -152,8 +157,14 @@ async def manual_adjust_usage_ledger(
     user_api_key_dict: AdminUser,
 ) -> UsageLedgerListResponse:
     _require_proxy_admin(user_api_key_dict)
+    actor_metadata = {
+        **data.metadata,
+        "adjusted_by_user_id": getattr(user_api_key_dict, "user_id", None),
+        "adjusted_by_user_email": getattr(user_api_key_dict, "user_email", None),
+    }
+    adjust_request = data.model_copy(update={"metadata": actor_metadata})
     try:
-        record = await _get_service(require_quota_store=True).manual_adjust(data)
+        record = await _get_service(require_quota_store=True).manual_adjust(adjust_request)
     except QuotaUnavailableError as exc:
         verbose_proxy_logger.exception("Code Plan quota manual adjustment failed: %s", exc)
         raise HTTPException(
@@ -167,4 +178,4 @@ async def manual_adjust_usage_ledger(
     except (RuntimeError, TypeError) as exc:
         verbose_proxy_logger.exception("Code Plan usage ledger manual adjustment failed: %s", exc)
         raise HTTPException(status_code=500, detail={"error": "Usage ledger manual adjustment failed"}) from exc
-    return UsageLedgerListResponse(data=[record])
+    return UsageLedgerListResponse(data=[record], has_more=False, limit=1, offset=0)

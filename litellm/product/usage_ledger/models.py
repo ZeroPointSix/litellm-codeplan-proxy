@@ -79,6 +79,9 @@ class UsageLedgerRecord(UsageLedgerCreate):
 class UsageLedgerListResponse(BaseModel):
     object: str = "list"
     data: list[UsageLedgerRecord]
+    has_more: bool = False
+    limit: int | None = None
+    offset: int | None = None
 
 
 class UsageLedgerAggregateRecord(BaseModel):
@@ -138,6 +141,7 @@ class UsageLedgerQuery(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     limit: int = Field(default=100, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
 
 
 class UsageLedgerAggregateQuery(UsageLedgerQuery):

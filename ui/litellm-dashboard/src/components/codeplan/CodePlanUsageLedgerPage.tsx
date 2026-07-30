@@ -127,8 +127,10 @@ export const usageLedgerMetadataReason = (metadata?: CodePlanUsageLedgerEntry["m
   return typeof reason === "string" && reason.trim() ? reason.trim() : "-";
 };
 
-export const isUsageLedgerTruncated = (entries: CodePlanUsageLedgerEntry[]): boolean =>
-  entries.length >= MAX_LEDGER_LIMIT;
+export const isUsageLedgerTruncated = (
+  entries: CodePlanUsageLedgerEntry[],
+  options?: { hasMore?: boolean },
+): boolean => Boolean(options?.hasMore) || entries.length >= MAX_LEDGER_LIMIT;
 
 export const summarizeUsageLedgerEntries = (
   entries: CodePlanUsageLedgerEntry[],
@@ -183,6 +185,8 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
     "output_multiplier",
     "cache_read_multiplier",
     "cache_write_multiplier",
+    "adjusted_by_user_id",
+    "adjusted_by_user_email",
   ];
   const rows = entries.map((entry) =>
     [
@@ -206,6 +210,8 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
       entry.output_multiplier,
       entry.cache_read_multiplier,
       entry.cache_write_multiplier,
+      entry.metadata?.adjusted_by_user_id ?? "",
+      entry.metadata?.adjusted_by_user_email ?? "",
     ]
       .map(csvEscape)
       .join(","),
@@ -219,10 +225,11 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
   URL.revokeObjectURL(url);
 };
 
-const queryFromFilters = (values: FilterValues, groupBy?: UsageLedgerGroupBy) => {
+const queryFromFilters = (values: FilterValues, groupBy?: UsageLedgerGroupBy, offset = 0) => {
   const [start, end] = values.time_range ?? [];
   return {
     limit: MAX_LEDGER_LIMIT,
+    offset,
     group_by: groupBy,
     start_time: start?.toISOString() ?? null,
     end_time: end?.toISOString() ?? null,
@@ -265,6 +272,9 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
   const [expandedKeys, setExpandedKeys] = useState<Key[]>([]);
   const [groupBy, setGroupBy] = useState<UsageLedgerGroupBy>("day");
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [chainLoadingKey, setChainLoadingKey] = useState<string | null>(null);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [savingAdjust, setSavingAdjust] = useState(false);
@@ -279,10 +289,11 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
     try {
       const filters = currentFilters();
       const [ledgerResponse, summaryResponse] = await Promise.all([
-        listCodePlanUsageLedger(accessToken, queryFromFilters(filters)),
-        summarizeCodePlanUsageLedger(accessToken, queryFromFilters(filters, groupBy)),
+        listCodePlanUsageLedger(accessToken, queryFromFilters(filters, undefined, 0)),
+        summarizeCodePlanUsageLedger(accessToken, queryFromFilters(filters, groupBy, 0)),
       ]);
       setEntries(ledgerResponse.data ?? []);
+      setHasMore(Boolean(ledgerResponse.has_more));
       setSummary(summaryResponse.data ?? []);
       setExpandedKeys([]);
       setChainRows({});
@@ -292,6 +303,52 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       setLoading(false);
     }
   }, [accessToken, currentFilters, groupBy]);
+
+  const loadMore = useCallback(async () => {
+    if (!accessToken || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const response = await listCodePlanUsageLedger(
+        accessToken,
+        queryFromFilters(currentFilters(), undefined, entries.length),
+      );
+      const nextRows = response.data ?? [];
+      setEntries((current) => {
+        const seen = new Set(current.map((entry) => entry.event_id));
+        return [...current, ...nextRows.filter((entry) => !seen.has(entry.event_id))];
+      });
+      setHasMore(Boolean(response.has_more));
+    } catch (err) {
+      messageApi.error(formatCodePlanError(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [accessToken, currentFilters, entries.length, hasMore, loadingMore, messageApi]);
+
+  const exportAllCsv = useCallback(async () => {
+    if (!accessToken) return;
+    setExporting(true);
+    try {
+      const filters = currentFilters();
+      const allRows: CodePlanUsageLedgerEntry[] = [];
+      let offset = 0;
+      let pageHasMore = true;
+      while (pageHasMore) {
+        const response = await listCodePlanUsageLedger(accessToken, queryFromFilters(filters, undefined, offset));
+        const page = response.data ?? [];
+        allRows.push(...page);
+        pageHasMore = Boolean(response.has_more);
+        offset += page.length;
+        if (page.length === 0) break;
+      }
+      downloadCsv(allRows);
+      messageApi.success(`已导出 ${allRows.length} 条流水`);
+    } catch (err) {
+      messageApi.error(formatCodePlanError(err));
+    } finally {
+      setExporting(false);
+    }
+  }, [accessToken, currentFilters, messageApi]);
 
   useEffect(() => {
     if (!didInitializeFilters.current) {
@@ -333,6 +390,17 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       }
     },
     [accessToken, chainRows, messageApi],
+  );
+
+  const toggleRequestChain = useCallback(
+    (record: CodePlanUsageLedgerEntry) => {
+      const expanded = expandedKeys.includes(record.event_id);
+      setExpandedKeys((current) =>
+        expanded ? current.filter((key) => key !== record.event_id) : [...current, record.event_id],
+      );
+      if (!expanded) void loadChain(record.request_id);
+    },
+    [expandedKeys, loadChain],
   );
 
   const openManualAdjust = (entry?: CodePlanUsageLedgerEntry) => {
@@ -436,7 +504,11 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       title: "request_id",
       dataIndex: "request_id",
       width: 240,
-      render: (value: string) => <Text code>{value}</Text>,
+      render: (value: string, record) => (
+        <Button type="link" className="!px-0" onClick={() => toggleRequestChain(record)}>
+          <Text code>{value}</Text>
+        </Button>
+      ),
     },
     {
       title: "subscription_id",
@@ -525,7 +597,12 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
                 <Button htmlType="submit" type="primary" icon={<ReloadOutlined />} loading={loading}>
                   查询
                 </Button>
-                <Button icon={<DownloadOutlined />} onClick={() => downloadCsv(entries)} disabled={!entries.length}>
+                <Button
+                  icon={<DownloadOutlined />}
+                  onClick={() => void exportAllCsv()}
+                  loading={exporting}
+                  disabled={!entries.length}
+                >
                   CSV
                 </Button>
                 <Button icon={<PlusOutlined />} onClick={() => openManualAdjust()}>
@@ -603,15 +680,20 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
             流水明细
           </Title>
           <Text type="secondary">
-            前端最多读取 {MAX_LEDGER_LIMIT} 条，并在表格内分页；展开行会按 request_id 拉取完整链路。
+            每次最多拉取 {MAX_LEDGER_LIMIT} 条；可用「加载更多」翻页，CSV 会按 offset 拉取全部匹配流水。点击
+            request_id 可展开同请求链路。
           </Text>
         </div>
-        {isUsageLedgerTruncated(entries) ? (
+        {isUsageLedgerTruncated(entries, { hasMore }) ? (
           <Alert
             type="warning"
             showIcon
             className="mb-4"
-            message={`当前结果已达到 ${MAX_LEDGER_LIMIT} 条上限，可能还有更多流水；请缩小时间或筛选条件。`}
+            message={
+              hasMore
+                ? `已加载 ${entries.length} 条，后端仍有更多流水。可点「加载更多」，或缩小筛选条件。`
+                : `当前结果已达到 ${MAX_LEDGER_LIMIT} 条上限，可能还有更多流水；请缩小时间或筛选条件。`
+            }
           />
         ) : null}
         <Table<CodePlanUsageLedgerEntry>
@@ -650,6 +732,13 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
             ),
           }}
         />
+        {hasMore ? (
+          <div className="mt-4 flex justify-center">
+            <Button loading={loadingMore} onClick={() => void loadMore()}>
+              加载更多（每次最多 {MAX_LEDGER_LIMIT} 条）
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       <Modal

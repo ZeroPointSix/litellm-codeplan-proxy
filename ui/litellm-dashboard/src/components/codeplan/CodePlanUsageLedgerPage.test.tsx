@@ -36,9 +36,10 @@ describe("CodePlanUsageLedgerPage helpers", () => {
     expect(usageLedgerMetadataReason({ reason: 42 })).toBe("-");
   });
 
-  it("marks the table as truncated at the API limit", () => {
+  it("marks the table as truncated at the API limit or when has_more is true", () => {
     expect(isUsageLedgerTruncated(Array.from({ length: 999 }, () => entry()))).toBe(false);
     expect(isUsageLedgerTruncated(Array.from({ length: 1000 }, () => entry()))).toBe(true);
+    expect(isUsageLedgerTruncated([entry()], { hasMore: true })).toBe(true);
   });
 
   it("summarizes billable credits using settle + manual_adjust only", () => {

@@ -53,6 +53,7 @@ export type CodePlanUsageLedgerQuery = QueryParams & {
   start_time?: string | null;
   end_time?: string | null;
   limit?: number | null;
+  offset?: number | null;
 };
 
 export type CodePlanUsageLedgerSummaryQuery = CodePlanUsageLedgerQuery & {
@@ -289,10 +290,13 @@ export const revokeCodePlanSubscriptionKey = (
   );
 
 export const listCodePlanUsageLedger = (accessToken: AccessToken, query?: CodePlanUsageLedgerQuery) =>
-  codePlanClient.get<CodePlanListResponse<CodePlanUsageLedgerEntry>>(CODEPLAN_ADMIN_ENDPOINTS.usageLedger, {
-    accessToken,
-    query,
-  });
+  codePlanClient.get<CodePlanListResponse<CodePlanUsageLedgerEntry> & { has_more?: boolean; limit?: number; offset?: number }>(
+    CODEPLAN_ADMIN_ENDPOINTS.usageLedger,
+    {
+      accessToken,
+      query,
+    },
+  );
 
 export const summarizeCodePlanUsageLedger = (accessToken: AccessToken, query?: CodePlanUsageLedgerSummaryQuery) =>
   codePlanClient.get<CodePlanListResponse<CodePlanUsageLedgerAggregate> & { group_by: UsageLedgerGroupBy }>(
