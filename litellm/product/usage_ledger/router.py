@@ -52,6 +52,9 @@ def _require_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> None:
         )
 
 
+_quota_service_by_url: dict[str, QuotaService] = {}
+
+
 def _get_service(require_quota_store: bool = False) -> UsageLedgerService:
     from litellm.proxy.proxy_server import prisma_client
 
@@ -73,9 +76,14 @@ def _get_quota_service(required: bool) -> QuotaService | None:
                 detail={"error": "Code Plan quota Redis is not configured"},
             )
         return None
+    cached = _quota_service_by_url.get(redis_url)
+    if cached is not None:
+        return cached
     import redis.asyncio as redis
 
-    return QuotaService(RedisQuotaStore(redis.from_url(redis_url, decode_responses=True)))
+    service = QuotaService(RedisQuotaStore(redis.from_url(redis_url, decode_responses=True)))
+    _quota_service_by_url[redis_url] = service
+    return service
 
 
 @router.get("", response_model=UsageLedgerListResponse)
@@ -152,7 +160,15 @@ async def manual_adjust_usage_ledger(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"error": "Code Plan quota store unavailable"},
         ) from exc
-    except (RuntimeError, TypeError, ValueError) as exc:
+    except ValueError as exc:
+        message = str(exc)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "subscription not found" in message
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=status_code, detail={"error": message}) from exc
+    except (RuntimeError, TypeError) as exc:
         verbose_proxy_logger.exception("Code Plan usage ledger manual adjustment failed: %s", exc)
         raise HTTPException(status_code=500, detail={"error": "Usage ledger manual adjustment failed"}) from exc
     return UsageLedgerListResponse(data=[record])
