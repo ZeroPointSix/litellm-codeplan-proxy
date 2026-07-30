@@ -55,9 +55,18 @@ const diffClass: Record<RowState, string> = {
   unchanged: "",
 };
 
-const effectNotice = ["配置调整仅对新 Usage 生效，不重算历史账本；", "真实扣费按后端 CreditRule 默认倍率 (*) 计算。"].join("");
-const actionNotice = ["该操作仅对新产生的 Usage 生效，不重算历史账本；", "已有 Usage 会继续保留当时冻结的倍率版本。"].join("");
-const editorNotice = ["只有默认兼容行 (*) 同步到后端 multiplier 字段并参与真实扣费；", "模型行仅保存到 metadata.model_multipliers。"].join("");
+const effectNotice = [
+  "配置调整仅对新 Usage 生效，不重算历史账本；",
+  "真实扣费按后端 CreditRule 默认倍率 (*) 计算。",
+].join("");
+const actionNotice = [
+  "该操作仅对新产生的 Usage 生效，不重算历史账本；",
+  "已有 Usage 会继续保留当时冻结的倍率版本。",
+].join("");
+const editorNotice = [
+  "只有默认兼容行 (*) 同步到后端 multiplier 字段并参与真实扣费；",
+  "模型行仅保存到 metadata.model_multipliers。",
+].join("");
 const updatedAt = (rule: CodePlanCreditRule) => new Date(rule.updated_at ?? rule.created_at ?? 0).getTime();
 const num = (value: unknown, fallback = 1) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 const show = (value: number) =>
