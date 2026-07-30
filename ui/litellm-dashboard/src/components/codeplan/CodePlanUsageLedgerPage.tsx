@@ -179,6 +179,10 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
     "output_tokens",
     "cache_read_tokens",
     "cache_write_tokens",
+    "input_multiplier",
+    "output_multiplier",
+    "cache_read_multiplier",
+    "cache_write_multiplier",
   ];
   const rows = entries.map((entry) =>
     [
@@ -198,6 +202,10 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
       entry.output_tokens,
       entry.cache_read_tokens,
       entry.cache_write_tokens,
+      entry.input_multiplier,
+      entry.output_multiplier,
+      entry.cache_read_multiplier,
+      entry.cache_write_multiplier,
     ]
       .map(csvEscape)
       .join(","),
@@ -453,12 +461,17 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       render: (value?: string | null) => value || "-",
     },
     {
-      title: "tokens",
-      width: 190,
+      title: "tokens / 倍率",
+      width: 220,
       render: (_, record) => (
-        <Text type="secondary">
-          in {formatNumber(record.input_tokens, 0)} / out {formatNumber(record.output_tokens, 0)}
-        </Text>
+        <Space direction="vertical" size={0}>
+          <Text type="secondary">
+            in {formatNumber(record.input_tokens, 0)} / out {formatNumber(record.output_tokens, 0)}
+          </Text>
+          <Text type="secondary">
+            ×{formatNumber(record.input_multiplier, 2)} / ×{formatNumber(record.output_multiplier, 2)}
+          </Text>
+        </Space>
       ),
     },
     {
