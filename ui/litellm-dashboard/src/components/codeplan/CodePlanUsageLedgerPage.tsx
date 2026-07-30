@@ -22,7 +22,7 @@ import { DownloadOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icon
 // eslint-disable-next-line no-restricted-imports
 import { AreaChart } from "@tremor/react";
 import dayjs, { type Dayjs } from "dayjs";
-import { useCallback, useEffect, useMemo, useState, type Key, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Key, type ReactNode } from "react";
 import { isProxyAdminRole } from "@/utils/roles";
 import {
   formatCodePlanError,
@@ -120,6 +120,14 @@ const creditsToUsd = (credits?: number | null): number => (credits ?? 0) * CREDI
 const formatUsd = (value?: number | null): string =>
   new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value ?? 0);
 
+export const usageLedgerMetadataReason = (metadata?: CodePlanUsageLedgerEntry["metadata"] | null): string => {
+  const reason = metadata?.reason;
+  return typeof reason === "string" && reason.trim() ? reason.trim() : "-";
+};
+
+export const isUsageLedgerTruncated = (entries: CodePlanUsageLedgerEntry[]): boolean =>
+  entries.length >= MAX_LEDGER_LIMIT;
+
 const signedNumber = (value?: number | null): string => {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
   const formatted = formatCredits(Math.abs(value));
@@ -145,6 +153,8 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
     "event_type",
     "credits",
     "usd_estimate",
+    "rule_version",
+    "reason",
     "input_tokens",
     "output_tokens",
     "cache_read_tokens",
@@ -162,6 +172,8 @@ const downloadCsv = (entries: CodePlanUsageLedgerEntry[]): void => {
       entry.event_type,
       entry.credits,
       creditsToUsd(entry.credits),
+      entry.rule_version,
+      usageLedgerMetadataReason(entry.metadata),
       entry.input_tokens,
       entry.output_tokens,
       entry.cache_read_tokens,
@@ -216,6 +228,7 @@ function EventTag({ eventType }: { eventType: UsageLedgerEventType }) {
 function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | null }) {
   const [filterForm] = Form.useForm<FilterValues>();
   const [manualForm] = Form.useForm<ManualAdjustFormValues>();
+  const didInitializeFilters = useRef(false);
   const [messageApi, messageContextHolder] = message.useMessage();
   const [modalApi, modalContextHolder] = Modal.useModal();
   const [entries, setEntries] = useState<CodePlanUsageLedgerEntry[]>([]);
@@ -253,10 +266,13 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
   }, [accessToken, currentFilters, groupBy]);
 
   useEffect(() => {
-    filterForm.setFieldsValue({
-      time_range: [dayjs().subtract(7, "day"), dayjs()],
-      event_type: "all",
-    });
+    if (!didInitializeFilters.current) {
+      didInitializeFilters.current = true;
+      filterForm.setFieldsValue({
+        time_range: [dayjs().subtract(7, "day"), dayjs()],
+        event_type: "all",
+      });
+    }
     const timer = window.setTimeout(() => {
       void load();
     }, 0);
@@ -373,11 +389,24 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
       ),
     },
     {
-      title: "USD",
+      title: "USD estimate",
       dataIndex: "credits",
-      width: 130,
+      width: 150,
       align: "right",
       render: (value: number) => formatUsd(creditsToUsd(value)),
+    },
+    {
+      title: "rule_version",
+      dataIndex: "rule_version",
+      width: 120,
+      align: "right",
+      render: (value: number) => formatNumber(value, 0),
+    },
+    {
+      title: "reason",
+      dataIndex: "metadata",
+      width: 220,
+      render: (metadata: CodePlanUsageLedgerEntry["metadata"]) => usageLedgerMetadataReason(metadata),
     },
     {
       title: "request_id",
@@ -539,12 +568,20 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
             前端最多读取 {MAX_LEDGER_LIMIT} 条，并在表格内分页；展开行会按 request_id 拉取完整链路。
           </Text>
         </div>
+        {isUsageLedgerTruncated(entries) ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="mb-4"
+            message={`当前结果已达到 ${MAX_LEDGER_LIMIT} 条上限，可能还有更多流水；请缩小时间或筛选条件。`}
+          />
+        ) : null}
         <Table<CodePlanUsageLedgerEntry>
           rowKey="event_id"
           columns={columns}
           dataSource={entries}
           loading={loading}
-          scroll={{ x: 1560 }}
+          scroll={{ x: 1900 }}
           rowClassName={(record) => (record.event_type === "manual_adjust" ? "bg-amber-50" : "")}
           pagination={{ pageSize: 20, showSizeChanger: true }}
           expandable={{
@@ -563,7 +600,7 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
                 loading={chainLoadingKey === record.request_id}
                 pagination={false}
                 size="small"
-                scroll={{ x: 1320 }}
+                scroll={{ x: 1660 }}
                 rowClassName={(row) => (row.event_type === "manual_adjust" ? "bg-amber-50" : "")}
                 locale={{ emptyText: "正在读取同 request_id 链路或暂无更多事件" }}
               />

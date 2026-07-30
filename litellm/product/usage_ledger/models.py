@@ -53,7 +53,7 @@ class UsageLedgerCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def validate_credit_direction(self) -> "UsageLedgerCreate":
+    def validate_credit_direction(self) -> UsageLedgerCreate:
         if self.credits < 0 and self.event_type != UsageLedgerEventType.MANUAL_ADJUST:
             raise ValueError("credits can only be negative for manual_adjust events")
         return self
@@ -112,7 +112,7 @@ class UsageLedgerManualAdjustRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def validate_manual_adjust_credits(self) -> "UsageLedgerManualAdjustRequest":
+    def validate_manual_adjust_credits(self) -> UsageLedgerManualAdjustRequest:
         if self.credits == 0:
             raise ValueError("credits must not be zero")
         return self

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Protocol
 
 from litellm.product.quotas.models import (
     CreditUsage,
+    QuotaAdjustmentResult,
     QuotaDecision,
     QuotaEventType,
     QuotaReserveRequest,
     QuotaSettlementRequest,
     QuotaWindow,
 )
+from litellm.product.quotas.service import QuotaUnavailableError, quota_windows_from_metadata
 from litellm.product.usage_ledger.models import (
     UsageLedgerAggregateRecord,
     UsageLedgerCreate,
@@ -21,9 +24,21 @@ from litellm.product.usage_ledger.models import (
 from litellm.product.usage_ledger.repository import UsageLedgerRepository
 
 
+class QuotaManualAdjuster(Protocol):
+    async def manual_adjust(
+        self,
+        *,
+        subscription_id: str,
+        request_id: str,
+        windows: list[QuotaWindow],
+        credits: float,
+    ) -> QuotaAdjustmentResult: ...
+
+
 class UsageLedgerService:
-    def __init__(self, repository: UsageLedgerRepository):
+    def __init__(self, repository: UsageLedgerRepository, quota_service: QuotaManualAdjuster | None = None):
         self.repository = repository
+        self.quota_service = quota_service
 
     async def record_quota_event(
         self,
@@ -134,7 +149,9 @@ class UsageLedgerService:
         )
 
     async def manual_adjust(self, data: UsageLedgerManualAdjustRequest) -> UsageLedgerRecord:
-        return await self.repository.create(
+        adjustment = await self._adjust_quota(data)
+        windows = adjustment.windows if adjustment is not None else []
+        record = await self.repository.create(
             UsageLedgerCreate(
                 request_id=data.request_id,
                 subscription_id=data.subscription_id,
@@ -144,9 +161,50 @@ class UsageLedgerService:
                 event_type=UsageLedgerEventType.MANUAL_ADJUST,
                 credits=data.credits,
                 rule_version=data.rule_version,
-                metadata={**data.metadata, "reason": data.reason},
+                window_5h_period_id=self._window_period_id(windows, "5h"),
+                window_5h_start=self._window_start(windows, "5h"),
+                window_5h_end=self._window_end(windows, "5h"),
+                window_week_period_id=self._window_period_id(windows, "week"),
+                window_week_start=self._window_start(windows, "week"),
+                window_week_end=self._window_end(windows, "week"),
+                metadata=self._manual_adjust_metadata(data, adjustment),
             )
         )
+        await self.repository.update_subscription_windows(
+            subscription_id=record.subscription_id,
+            window_5h_start=record.window_5h_start,
+            window_week_start=record.window_week_start,
+        )
+        return record
+
+    async def _adjust_quota(self, data: UsageLedgerManualAdjustRequest) -> QuotaAdjustmentResult | None:
+        if self.quota_service is None:
+            return None
+        metadata = await self.repository.subscription_quota_metadata(data.subscription_id)
+        windows = quota_windows_from_metadata(metadata)
+        try:
+            return await self.quota_service.manual_adjust(
+                subscription_id=data.subscription_id,
+                request_id=data.request_id,
+                windows=windows,
+                credits=data.credits,
+            )
+        except QuotaUnavailableError:
+            raise
+        except Exception as exc:
+            raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
+
+    def _manual_adjust_metadata(
+        self, data: UsageLedgerManualAdjustRequest, adjustment: QuotaAdjustmentResult | None
+    ) -> dict[str, object]:
+        if adjustment is None:
+            return {**data.metadata, "reason": data.reason}
+        return {
+            **data.metadata,
+            "reason": data.reason,
+            "balances_before": adjustment.balances_before,
+            "balances_after": adjustment.balances_after,
+        }
 
     def _event_type(self, event_type: QuotaEventType) -> UsageLedgerEventType:
         if event_type == QuotaEventType.EXPIRED:

@@ -10,6 +10,7 @@ from litellm._logging import verbose_proxy_logger
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
+    QuotaAdjustmentResult,
     QuotaDecision,
     QuotaEventType,
     QuotaReserveRequest,
@@ -40,6 +41,15 @@ class QuotaStore(Protocol):
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision: ...
 
     async def settle(self, request: QuotaSettlementRequest, settled_credits: float) -> QuotaDecision: ...
+
+    async def manual_adjust(
+        self,
+        *,
+        subscription_id: str,
+        request_id: str,
+        windows: list[QuotaWindow],
+        credits: float,
+    ) -> QuotaAdjustmentResult: ...
 
 
 class UsageLedgerWriter(Protocol):
@@ -434,6 +444,28 @@ class InMemoryQuotaStore:
         self.events[event_key] = decision
         return decision
 
+    async def manual_adjust(
+        self,
+        *,
+        subscription_id: str,
+        request_id: str,
+        windows: list[QuotaWindow],
+        credits: float,
+    ) -> QuotaAdjustmentResult:
+        balances_before = self._balances_before(subscription_id, windows)
+        delta = -credits
+        for window in windows:
+            key = (subscription_id, window.name, window.period_id)
+            self.spent[key] = self.spent.get(key, 0.0) + delta
+        return QuotaAdjustmentResult(
+            subscription_id=subscription_id,
+            request_id=request_id,
+            credits=credits,
+            balances_before=balances_before,
+            balances_after=self._balances_before(subscription_id, windows),
+            windows=windows,
+        )
+
     async def expire_pending_usage(
         self,
         subscription_id: str | None = None,
@@ -562,6 +594,25 @@ class QuotaService:
             raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
         await self._record_quota_event(decision=decision, request=request, usage=usage)
         return decision
+
+    async def manual_adjust(
+        self,
+        *,
+        subscription_id: str,
+        request_id: str,
+        windows: list[QuotaWindow],
+        credits: float,
+    ) -> QuotaAdjustmentResult:
+        resolved_windows = await self._with_resolved_windows(subscription_id, windows)
+        try:
+            return await self.store.manual_adjust(
+                subscription_id=subscription_id,
+                request_id=request_id,
+                windows=resolved_windows,
+                credits=credits,
+            )
+        except Exception as exc:
+            raise QuotaUnavailableError("Code Plan quota store unavailable") from exc
 
     async def _record_quota_event(
         self,

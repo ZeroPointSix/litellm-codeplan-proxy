@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel
 
@@ -111,6 +111,45 @@ class UsageLedgerRepository:
         rows = await self.writer_db.query_raw(query, *arguments, limit)
         return [UsageLedgerAggregateRecord.model_validate(dict(row)) for row in rows]
 
+    async def subscription_quota_metadata(self, subscription_id: str) -> dict[str, object]:
+        query = f"""
+            SELECT
+                "subscription_id",
+                "project_id",
+                "metadata",
+                "plan_snapshot",
+                "renewed_at",
+                "created_at",
+                "window_5h_start"
+            FROM "{self.subscription_raw_table_name}"
+            WHERE "subscription_id" = $1
+            LIMIT 1
+        """
+        rows = await self.writer_db.query_raw(query, subscription_id)
+        if not rows:
+            raise ValueError("subscription not found")
+        row = dict(rows[0])
+        self._load_json_field(row, "metadata", {})
+        self._load_json_field(row, "plan_snapshot", {})
+        plan_snapshot = row.get("plan_snapshot")
+        if not isinstance(plan_snapshot, dict):
+            raise ValueError("subscription plan snapshot is required")
+        metadata = dict(row["metadata"]) if isinstance(row.get("metadata"), dict) else {}
+        metadata["code_plan_subscription_id"] = str(row["subscription_id"])
+        metadata["code_plan_project_id"] = str(row["project_id"])
+        metadata["code_plan_quota_5h"] = float(plan_snapshot["quota_5h"])
+        metadata["code_plan_quota_weekly"] = float(plan_snapshot["quota_weekly"])
+        plan_metadata = plan_snapshot.get("metadata")
+        if isinstance(plan_metadata, dict) and plan_metadata.get("quota_monthly") is not None:
+            metadata["code_plan_quota_monthly"] = float(plan_metadata["quota_monthly"])
+        week_anchor = row.get("renewed_at") or row.get("created_at")
+        if isinstance(week_anchor, datetime):
+            metadata["code_plan_week_anchor_epoch"] = self._epoch(week_anchor)
+        window_5h_start = row.get("window_5h_start")
+        if isinstance(window_5h_start, datetime):
+            metadata["code_plan_5h_anchor_epoch"] = self._epoch(window_5h_start)
+        return metadata
+
     async def update_subscription_windows(
         self,
         *,
@@ -207,6 +246,10 @@ class UsageLedgerRepository:
         if group_by == UsageLedgerGroupBy.MODEL:
             return "COALESCE(\"model\", '')"
         return "COALESCE(\"user_id\", '')"
+
+    def _epoch(self, value: datetime) -> int:
+        aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return int(aware.timestamp())
 
     def _to_model(self, record: object) -> UsageLedgerRecord:
         if isinstance(record, BaseModel):

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing_extensions import Annotated
 
 from litellm._logging import verbose_proxy_logger
+from litellm.product.quotas.redis_store import RedisQuotaStore
+from litellm.product.quotas.service import QuotaService, QuotaUnavailableError
 from litellm.product.usage_ledger.models import (
     UsageLedgerAggregateResponse,
     UsageLedgerEventType,
@@ -49,7 +52,7 @@ def _require_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> None:
         )
 
 
-def _get_service() -> UsageLedgerService:
+def _get_service(require_quota_store: bool = False) -> UsageLedgerService:
     from litellm.proxy.proxy_server import prisma_client
 
     if prisma_client is None:
@@ -57,7 +60,22 @@ def _get_service() -> UsageLedgerService:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Database is not connected"},
         )
-    return UsageLedgerService(UsageLedgerRepository(prisma_client))
+    quota_service = _get_quota_service(required=require_quota_store)
+    return UsageLedgerService(UsageLedgerRepository(prisma_client), quota_service=quota_service)
+
+
+def _get_quota_service(required: bool) -> QuotaService | None:
+    redis_url = os.getenv("CODE_PLAN_QUOTA_REDIS_URL") or os.getenv("REDIS_URL")
+    if not redis_url:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"error": "Code Plan quota Redis is not configured"},
+            )
+        return None
+    import redis.asyncio as redis
+
+    return QuotaService(RedisQuotaStore(redis.from_url(redis_url, decode_responses=True)))
 
 
 @router.get("", response_model=UsageLedgerListResponse)
@@ -127,7 +145,13 @@ async def manual_adjust_usage_ledger(
 ) -> UsageLedgerListResponse:
     _require_proxy_admin(user_api_key_dict)
     try:
-        record = await _get_service().manual_adjust(data)
+        record = await _get_service(require_quota_store=True).manual_adjust(data)
+    except QuotaUnavailableError as exc:
+        verbose_proxy_logger.exception("Code Plan quota manual adjustment failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Code Plan quota store unavailable"},
+        ) from exc
     except (RuntimeError, TypeError, ValueError) as exc:
         verbose_proxy_logger.exception("Code Plan usage ledger manual adjustment failed: %s", exc)
         raise HTTPException(status_code=500, detail={"error": "Usage ledger manual adjustment failed"}) from exc
