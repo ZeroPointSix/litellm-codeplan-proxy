@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing_extensions import Annotated
 
 from litellm._logging import verbose_proxy_logger
+from litellm.product.quotas.redis_store import RedisQuotaStore
+from litellm.product.quotas.service import QuotaService, QuotaUnavailableError
 from litellm.product.usage_ledger.models import (
     UsageLedgerAggregateResponse,
     UsageLedgerEventType,
@@ -49,7 +52,10 @@ def _require_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> None:
         )
 
 
-def _get_service() -> UsageLedgerService:
+_quota_service_by_url: dict[str, QuotaService] = {}
+
+
+def _get_service(require_quota_store: bool = False) -> UsageLedgerService:
     from litellm.proxy.proxy_server import prisma_client
 
     if prisma_client is None:
@@ -57,12 +63,33 @@ def _get_service() -> UsageLedgerService:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Database is not connected"},
         )
-    return UsageLedgerService(UsageLedgerRepository(prisma_client))
+    quota_service = _get_quota_service(required=require_quota_store)
+    return UsageLedgerService(UsageLedgerRepository(prisma_client), quota_service=quota_service)
+
+
+def _get_quota_service(required: bool) -> QuotaService | None:
+    redis_url = os.getenv("CODE_PLAN_QUOTA_REDIS_URL") or os.getenv("REDIS_URL")
+    if not redis_url:
+        if required:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"error": "Code Plan quota Redis is not configured"},
+            )
+        return None
+    cached = _quota_service_by_url.get(redis_url)
+    if cached is not None:
+        return cached
+    import redis.asyncio as redis
+
+    service = QuotaService(RedisQuotaStore(redis.from_url(redis_url, decode_responses=True)))
+    _quota_service_by_url[redis_url] = service
+    return service
 
 
 @router.get("", response_model=UsageLedgerListResponse)
 async def list_usage_ledger(
     user_api_key_dict: AdminUser,
+    request_id: str | None = None,
     subscription_id: str | None = None,
     project_id: str | None = None,
     user_id: str | None = None,
@@ -71,10 +98,13 @@ async def list_usage_ledger(
     start_time: datetime | None = None,
     end_time: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> UsageLedgerListResponse:
     _require_proxy_admin(user_api_key_dict)
     service = _get_service()
-    records = await service.list_events(
+    # Fetch one extra row to detect whether another page exists without a full COUNT.
+    page = await service.list_events(
+        request_id=request_id,
         subscription_id=subscription_id,
         project_id=project_id,
         user_id=user_id,
@@ -82,15 +112,19 @@ async def list_usage_ledger(
         event_type=event_type,
         start_time=start_time,
         end_time=end_time,
-        limit=limit,
+        limit=limit + 1,
+        offset=offset,
     )
-    return UsageLedgerListResponse(data=records)
+    has_more = len(page) > limit
+    records = page[:limit]
+    return UsageLedgerListResponse(data=records, has_more=has_more, limit=limit, offset=offset)
 
 
 @router.get("/summary", response_model=UsageLedgerAggregateResponse)
 async def summarize_usage_ledger(
     user_api_key_dict: AdminUser,
     group_by: UsageLedgerGroupBy = UsageLedgerGroupBy.DAY,
+    request_id: str | None = None,
     subscription_id: str | None = None,
     project_id: str | None = None,
     user_id: str | None = None,
@@ -104,6 +138,7 @@ async def summarize_usage_ledger(
     service = _get_service()
     rows = await service.aggregate_events(
         group_by=group_by,
+        request_id=request_id,
         subscription_id=subscription_id,
         project_id=project_id,
         user_id=user_id,
@@ -122,9 +157,25 @@ async def manual_adjust_usage_ledger(
     user_api_key_dict: AdminUser,
 ) -> UsageLedgerListResponse:
     _require_proxy_admin(user_api_key_dict)
+    actor_metadata = {
+        **data.metadata,
+        "adjusted_by_user_id": getattr(user_api_key_dict, "user_id", None),
+        "adjusted_by_user_email": getattr(user_api_key_dict, "user_email", None),
+    }
+    adjust_request = data.model_copy(update={"metadata": actor_metadata})
     try:
-        record = await _get_service().manual_adjust(data)
-    except (RuntimeError, TypeError, ValueError) as exc:
+        record = await _get_service(require_quota_store=True).manual_adjust(adjust_request)
+    except QuotaUnavailableError as exc:
+        verbose_proxy_logger.exception("Code Plan quota manual adjustment failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Code Plan quota store unavailable"},
+        ) from exc
+    except ValueError as exc:
+        message = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "subscription not found" in message else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail={"error": message}) from exc
+    except (RuntimeError, TypeError) as exc:
         verbose_proxy_logger.exception("Code Plan usage ledger manual adjustment failed: %s", exc)
         raise HTTPException(status_code=500, detail={"error": "Usage ledger manual adjustment failed"}) from exc
-    return UsageLedgerListResponse(data=[record])
+    return UsageLedgerListResponse(data=[record], has_more=False, limit=1, offset=0)

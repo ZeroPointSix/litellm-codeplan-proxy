@@ -44,6 +44,7 @@ export type CodePlanSubscriptionListQuery = StatusQuery<SubscriptionStatus> & {
 };
 
 export type CodePlanUsageLedgerQuery = QueryParams & {
+  request_id?: string | null;
   subscription_id?: string | null;
   project_id?: string | null;
   user_id?: string | null;
@@ -52,6 +53,7 @@ export type CodePlanUsageLedgerQuery = QueryParams & {
   start_time?: string | null;
   end_time?: string | null;
   limit?: number | null;
+  offset?: number | null;
 };
 
 export type CodePlanUsageLedgerSummaryQuery = CodePlanUsageLedgerQuery & {
@@ -107,6 +109,7 @@ export interface CodePlanUsageLedgerManualAdjustRequest {
   subscription_id: string;
   request_id: string;
   credits: number;
+  reason: string;
   project_id?: string | null;
   user_id?: string | null;
   model?: string | null;
@@ -287,7 +290,9 @@ export const revokeCodePlanSubscriptionKey = (
   );
 
 export const listCodePlanUsageLedger = (accessToken: AccessToken, query?: CodePlanUsageLedgerQuery) =>
-  codePlanClient.get<CodePlanListResponse<CodePlanUsageLedgerEntry>>(CODEPLAN_ADMIN_ENDPOINTS.usageLedger, {
+  codePlanClient.get<
+    CodePlanListResponse<CodePlanUsageLedgerEntry> & { has_more?: boolean; limit?: number; offset?: number }
+  >(CODEPLAN_ADMIN_ENDPOINTS.usageLedger, {
     accessToken,
     query,
   });

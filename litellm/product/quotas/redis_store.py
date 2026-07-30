@@ -5,6 +5,7 @@ import json
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
+    QuotaAdjustmentResult,
     QuotaDecision,
     QuotaEventType,
     QuotaReserveRequest,
@@ -246,6 +247,33 @@ class RedisQuotaStore:
             except (TypeError, ValueError):
                 spent[window.name] = 0.0
         return spent
+
+    async def manual_adjust(
+        self,
+        *,
+        subscription_id: str,
+        request_id: str,
+        windows: list[QuotaWindow],
+        credits: float,
+    ) -> QuotaAdjustmentResult:
+        balances_before = await self._window_balances(subscription_id, windows)
+        for window in windows:
+            key = self._spent_key(subscription_id, window.name, window.period_id)
+            await self.redis_client.incrbyfloat(key, -credits)
+            await self.redis_client.expireat(key, int(window.period_end_epoch))
+        balances_after = await self._window_balances(subscription_id, windows)
+        return QuotaAdjustmentResult(
+            subscription_id=subscription_id,
+            request_id=request_id,
+            credits=credits,
+            balances_before=balances_before,
+            balances_after=balances_after,
+            windows=windows,
+        )
+
+    async def _window_balances(self, subscription_id: str, windows: list[QuotaWindow]) -> dict[str, float]:
+        spent = await self.get_window_spent(subscription_id, windows)
+        return {window.name: window.limit - spent.get(window.name, 0.0) for window in windows}
 
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
         keys = self._keys(request.subscription_id, request.request_id, QuotaEventType.RESERVE, request.windows)

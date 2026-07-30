@@ -4,7 +4,7 @@ import useAuthorized from "@/app/(dashboard)/hooks/useAuthorized";
 import { CodePlanUsageLedgerPage } from "@/components/codeplan";
 
 export default function CodePlanUsageLedger() {
-  const { userRole } = useAuthorized();
+  const { accessToken, userRole } = useAuthorized();
 
-  return <CodePlanUsageLedgerPage userRole={userRole} />;
+  return <CodePlanUsageLedgerPage accessToken={accessToken} userRole={userRole} />;
 }

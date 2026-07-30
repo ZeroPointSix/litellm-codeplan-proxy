@@ -95,6 +95,17 @@ class QuotaSettlementRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class QuotaAdjustmentResult(BaseModel):
+    subscription_id: str
+    request_id: str
+    credits: float
+    balances_before: dict[str, float] = Field(default_factory=dict)
+    balances_after: dict[str, float] = Field(default_factory=dict)
+    windows: list[QuotaWindow] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class QuotaDecision(BaseModel):
     allowed: bool
     request_id: str

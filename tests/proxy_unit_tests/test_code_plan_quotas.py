@@ -225,6 +225,42 @@ async def test_reserve_then_settle_true_up_releases_unused_credits():
 
 
 @pytest.mark.asyncio
+async def test_quota_service_manual_adjust_updates_window_balances():
+    store = InMemoryQuotaStore()
+    service = QuotaService(store)
+    windows = _windows(limit_5h=100, limit_week=500, limit_month=1000)
+    await service.reserve(
+        QuotaReserveRequest(
+            request_id="req-manual-balance",
+            subscription_id="sub-manual-balance",
+            input_usage=CreditUsage(input_tokens=40),
+            multipliers=CreditMultipliers(),
+            windows=windows,
+            default_max_output_tokens=0,
+        )
+    )
+
+    credit = await service.manual_adjust(
+        subscription_id="sub-manual-balance",
+        request_id="manual-credit",
+        windows=windows,
+        credits=10,
+    )
+    debit = await service.manual_adjust(
+        subscription_id="sub-manual-balance",
+        request_id="manual-debit",
+        windows=windows,
+        credits=-5,
+    )
+
+    assert credit.balances_before["5h"] == 60
+    assert credit.balances_after["5h"] == 70
+    assert debit.balances_before["week"] == 470
+    assert debit.balances_after["week"] == 465
+    assert _spent(store, "sub-manual-balance", "5h") == 35
+
+
+@pytest.mark.asyncio
 async def test_reserve_is_idempotent_by_request_and_event_type():
     store = InMemoryQuotaStore()
     service = QuotaService(store)

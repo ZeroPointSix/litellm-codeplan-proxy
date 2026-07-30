@@ -1,6 +1,7 @@
 from litellm.product.quotas.models import (
     CreditMultipliers,
     CreditUsage,
+    QuotaAdjustmentResult,
     QuotaDecision,
     QuotaEventType,
     QuotaReserveRequest,
@@ -24,6 +25,7 @@ __all__ = [
     "CreditMultipliers",
     "CreditUsage",
     "InMemoryQuotaStore",
+    "QuotaAdjustmentResult",
     "QuotaDecision",
     "QuotaEventType",
     "QuotaExceededError",
