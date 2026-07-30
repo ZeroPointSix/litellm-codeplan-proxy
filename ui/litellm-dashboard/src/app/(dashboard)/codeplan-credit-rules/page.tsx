@@ -262,11 +262,12 @@ export default function CodePlanCreditRules() {
     setLoading(true);
     try {
       const [ruleList, modelList, planList] = await Promise.all([
-        listCodePlanCreditRules(accessToken, status === "all" ? undefined : { status }),
+        listCodePlanCreditRules(accessToken),
         listCodePlanAvailableModels(accessToken),
         listCodePlanPlans(accessToken, { status: "active" }),
       ]);
-      const nextRules = latestRules(ruleList.data ?? []);
+      const latestRuleList = latestRules(ruleList.data ?? []);
+      const nextRules = status === "all" ? latestRuleList : latestRuleList.filter((rule) => rule.status === status);
       const nextRefs: Record<string, CodePlanPlan[]> = {};
       for (const plan of planList.data ?? []) {
         if (plan.credit_rule_id) nextRefs[plan.credit_rule_id] = [...(nextRefs[plan.credit_rule_id] ?? []), plan];
