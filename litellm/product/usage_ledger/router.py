@@ -63,6 +63,7 @@ def _get_service() -> UsageLedgerService:
 @router.get("", response_model=UsageLedgerListResponse)
 async def list_usage_ledger(
     user_api_key_dict: AdminUser,
+    request_id: str | None = None,
     subscription_id: str | None = None,
     project_id: str | None = None,
     user_id: str | None = None,
@@ -75,6 +76,7 @@ async def list_usage_ledger(
     _require_proxy_admin(user_api_key_dict)
     service = _get_service()
     records = await service.list_events(
+        request_id=request_id,
         subscription_id=subscription_id,
         project_id=project_id,
         user_id=user_id,
@@ -91,6 +93,7 @@ async def list_usage_ledger(
 async def summarize_usage_ledger(
     user_api_key_dict: AdminUser,
     group_by: UsageLedgerGroupBy = UsageLedgerGroupBy.DAY,
+    request_id: str | None = None,
     subscription_id: str | None = None,
     project_id: str | None = None,
     user_id: str | None = None,
@@ -104,6 +107,7 @@ async def summarize_usage_ledger(
     service = _get_service()
     rows = await service.aggregate_events(
         group_by=group_by,
+        request_id=request_id,
         subscription_id=subscription_id,
         project_id=project_id,
         user_id=user_id,

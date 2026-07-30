@@ -760,7 +760,3 @@ export function CodePlanPlansPage({ accessToken, userRole }: CodePlanRouteProps)
 export function CodePlanCreditRulesPage({ userRole }: CodePlanRouteProps) {
   return <CodePlanPage section={CODE_PLAN_PAGE_DEFINITIONS.creditRules} userRole={userRole} />;
 }
-
-export function CodePlanUsageLedgerPage({ userRole }: CodePlanRouteProps) {
-  return <CodePlanPage section={CODE_PLAN_PAGE_DEFINITIONS.usageLedger} userRole={userRole} />;
-}

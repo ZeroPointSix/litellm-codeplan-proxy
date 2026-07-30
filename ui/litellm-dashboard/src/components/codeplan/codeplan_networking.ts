@@ -44,6 +44,7 @@ export type CodePlanSubscriptionListQuery = StatusQuery<SubscriptionStatus> & {
 };
 
 export type CodePlanUsageLedgerQuery = QueryParams & {
+  request_id?: string | null;
   subscription_id?: string | null;
   project_id?: string | null;
   user_id?: string | null;
@@ -107,6 +108,7 @@ export interface CodePlanUsageLedgerManualAdjustRequest {
   subscription_id: string;
   request_id: string;
   credits: number;
+  reason: string;
   project_id?: string | null;
   user_id?: string | null;
   model?: string | null;

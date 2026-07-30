@@ -75,6 +75,7 @@ class UsageLedgerService:
     async def list_events(
         self,
         *,
+        request_id: str | None = None,
         subscription_id: str | None = None,
         project_id: str | None = None,
         user_id: str | None = None,
@@ -85,6 +86,7 @@ class UsageLedgerService:
         limit: int = 100,
     ) -> list[UsageLedgerRecord]:
         return await self.repository.list(
+            request_id=request_id,
             subscription_id=subscription_id,
             project_id=project_id,
             user_id=user_id,
@@ -99,6 +101,7 @@ class UsageLedgerService:
         self,
         *,
         group_by: UsageLedgerGroupBy,
+        request_id: str | None = None,
         subscription_id: str | None = None,
         project_id: str | None = None,
         user_id: str | None = None,
@@ -119,6 +122,7 @@ class UsageLedgerService:
 
         return await self.repository.aggregate(
             group_by=group_by,
+            request_id=request_id,
             subscription_id=subscription_id,
             project_id=project_id,
             user_id=user_id,
@@ -140,7 +144,7 @@ class UsageLedgerService:
                 event_type=UsageLedgerEventType.MANUAL_ADJUST,
                 credits=data.credits,
                 rule_version=data.rule_version,
-                metadata=data.metadata,
+                metadata={**data.metadata, "reason": data.reason},
             )
         )
 

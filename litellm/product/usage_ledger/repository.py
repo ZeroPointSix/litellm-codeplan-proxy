@@ -43,6 +43,7 @@ class UsageLedgerRepository:
     async def list(
         self,
         *,
+        request_id: str | None = None,
         subscription_id: str | None = None,
         project_id: str | None = None,
         user_id: str | None = None,
@@ -53,6 +54,7 @@ class UsageLedgerRepository:
         limit: int = 100,
     ) -> list[UsageLedgerRecord]:
         where = self._where(
+            request_id=request_id,
             subscription_id=subscription_id,
             project_id=project_id,
             user_id=user_id,
@@ -68,6 +70,7 @@ class UsageLedgerRepository:
         self,
         *,
         group_by: UsageLedgerGroupBy,
+        request_id: str | None = None,
         subscription_id: str | None = None,
         project_id: str | None = None,
         user_id: str | None = None,
@@ -79,6 +82,7 @@ class UsageLedgerRepository:
     ) -> list[UsageLedgerAggregateRecord]:
         group_expr = self._group_expression(group_by)
         where_sql, arguments = self._where_sql(
+            request_id=request_id,
             subscription_id=subscription_id,
             project_id=project_id,
             user_id=user_id,
@@ -135,6 +139,7 @@ class UsageLedgerRepository:
     def _where(
         self,
         *,
+        request_id: str | None,
         subscription_id: str | None,
         project_id: str | None,
         user_id: str | None,
@@ -145,6 +150,7 @@ class UsageLedgerRepository:
     ) -> dict[str, object]:
         where: dict[str, object] = {}
         for field_name, value in (
+            ("request_id", request_id),
             ("subscription_id", subscription_id),
             ("project_id", project_id),
             ("user_id", user_id),
@@ -166,6 +172,7 @@ class UsageLedgerRepository:
         clauses: list[str] = []
         arguments: list[object] = []
         column_map = {
+            "request_id": "request_id",
             "subscription_id": "subscription_id",
             "project_id": "project_id",
             "user_id": "user_id",

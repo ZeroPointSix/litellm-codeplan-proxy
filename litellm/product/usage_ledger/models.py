@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class UsageLedgerEventType(str, Enum):
@@ -32,7 +32,7 @@ class UsageLedgerCreate(BaseModel):
     api_key_id: str | None = None
     model: str | None = None
     event_type: UsageLedgerEventType
-    credits: float = Field(ge=0)
+    credits: float
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     cache_read_tokens: int = Field(default=0, ge=0)
@@ -51,6 +51,12 @@ class UsageLedgerCreate(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_credit_direction(self) -> "UsageLedgerCreate":
+        if self.credits < 0 and self.event_type != UsageLedgerEventType.MANUAL_ADJUST:
+            raise ValueError("credits can only be negative for manual_adjust events")
+        return self
 
     @field_validator("request_id", "subscription_id", "project_id", "user_id", "api_key_id", "model")
     @classmethod
@@ -95,7 +101,8 @@ class UsageLedgerAggregateResponse(BaseModel):
 class UsageLedgerManualAdjustRequest(BaseModel):
     subscription_id: str = Field(min_length=1)
     request_id: str = Field(min_length=1)
-    credits: float = Field(ge=0)
+    credits: float
+    reason: str = Field(min_length=1)
     project_id: str | None = None
     user_id: str | None = None
     model: str | None = None
@@ -104,7 +111,13 @@ class UsageLedgerManualAdjustRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("subscription_id", "request_id", "project_id", "user_id", "model")
+    @model_validator(mode="after")
+    def validate_manual_adjust_credits(self) -> "UsageLedgerManualAdjustRequest":
+        if self.credits == 0:
+            raise ValueError("credits must not be zero")
+        return self
+
+    @field_validator("subscription_id", "request_id", "reason", "project_id", "user_id", "model")
     @classmethod
     def clean_strings(cls, value: str | None) -> str | None:
         if value is None:
@@ -116,6 +129,7 @@ class UsageLedgerManualAdjustRequest(BaseModel):
 
 
 class UsageLedgerQuery(BaseModel):
+    request_id: str | None = None
     subscription_id: str | None = None
     project_id: str | None = None
     user_id: str | None = None

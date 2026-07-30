@@ -24,6 +24,7 @@ class _UsageLedgerRepository:
         self.created = []
         self.window_updates = []
         self.aggregates = []
+        self.lists = []
 
     async def create(self, data):
         self.created.append(data)
@@ -35,6 +36,10 @@ class _UsageLedgerRepository:
 
     async def update_subscription_windows(self, **kwargs):
         self.window_updates.append(kwargs)
+
+    async def list(self, **kwargs):
+        self.lists.append(kwargs)
+        return []
 
     async def aggregate(self, **kwargs):
         self.aggregates.append(kwargs)
@@ -112,7 +117,8 @@ async def test_usage_ledger_manual_adjust_creates_manual_adjust_event():
         UsageLedgerManualAdjustRequest(
             subscription_id="sub-manual",
             request_id="manual-1",
-            credits=25,
+            credits=-25,
+            reason="support debit",
             project_id="project-manual",
             user_id="user-manual",
             model="manual-model",
@@ -122,9 +128,9 @@ async def test_usage_ledger_manual_adjust_creates_manual_adjust_event():
     )
 
     assert record.event_type == UsageLedgerEventType.MANUAL_ADJUST
-    assert record.credits == 25
+    assert record.credits == -25
     assert record.rule_version == 3
-    assert record.metadata == {"reason": "support credit"}
+    assert record.metadata == {"reason": "support debit"}
 
 
 @pytest.mark.asyncio
@@ -151,3 +157,14 @@ async def test_usage_ledger_summary_respects_explicit_event_type():
     )
 
     assert repository.aggregates[0]["event_type"] == UsageLedgerEventType.RESERVE.value
+
+
+@pytest.mark.asyncio
+async def test_usage_ledger_list_filters_by_request_id():
+    repository = _UsageLedgerRepository()
+    service = UsageLedgerService(repository)
+
+    await service.list_events(request_id="req-chain", limit=1000)
+
+    assert repository.lists[0]["request_id"] == "req-chain"
+    assert repository.lists[0]["limit"] == 1000
