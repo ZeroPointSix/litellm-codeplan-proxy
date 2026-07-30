@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "${IMAGE_NAME}@${IMAGE_DIGEST}"
-          docker run --rm --entrypoint python "${IMAGE_NAME}@${IMAGE_DIGEST}" -c "import litellm; print(litellm.__version__)"
+          docker run --rm --entrypoint python "${IMAGE_NAME}@${IMAGE_DIGEST}" -c "import litellm; print('litellm import ok:', litellm.__file__)"
 
       - name: Write image summary
         env:
