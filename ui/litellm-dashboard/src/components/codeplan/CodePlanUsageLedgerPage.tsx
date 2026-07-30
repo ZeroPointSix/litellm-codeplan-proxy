@@ -43,6 +43,8 @@ const { Text, Title } = Typography;
 
 const MAX_LEDGER_LIMIT = 1000;
 const CREDIT_USD_RATE = 0.01;
+/** Align with backend summary default: settle + manual_adjust are billable. */
+export const BILLABLE_USAGE_LEDGER_EVENT_TYPES = new Set<UsageLedgerEventType>(["settle", "manual_adjust"]);
 const ledgerSection = CODE_PLAN_PAGE_DEFINITIONS.usageLedger;
 
 interface CodePlanUsageLedgerPageProps {
@@ -127,6 +129,24 @@ export const usageLedgerMetadataReason = (metadata?: CodePlanUsageLedgerEntry["m
 
 export const isUsageLedgerTruncated = (entries: CodePlanUsageLedgerEntry[]): boolean =>
   entries.length >= MAX_LEDGER_LIMIT;
+
+export const summarizeUsageLedgerEntries = (
+  entries: CodePlanUsageLedgerEntry[],
+  options?: { billableOnly?: boolean },
+): { credits: number; usd: number; requestCount: number; eventCount: number; billableEventCount: number } => {
+  const billableOnly = options?.billableOnly ?? true;
+  const creditEntries = billableOnly
+    ? entries.filter((entry) => BILLABLE_USAGE_LEDGER_EVENT_TYPES.has(entry.event_type))
+    : entries;
+  const credits = creditEntries.reduce((sum, entry) => sum + (entry.credits ?? 0), 0);
+  return {
+    credits,
+    usd: creditsToUsd(credits),
+    requestCount: new Set(entries.map((entry) => entry.request_id)).size,
+    eventCount: entries.length,
+    billableEventCount: creditEntries.length,
+  };
+};
 
 const signedNumber = (value?: number | null): string => {
   if (value === null || value === undefined || Number.isNaN(value)) return "-";
@@ -279,11 +299,7 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
     return () => window.clearTimeout(timer);
   }, [filterForm, load]);
 
-  const totals = useMemo(() => {
-    const credits = entries.reduce((sum, entry) => sum + (entry.credits ?? 0), 0);
-    const requestCount = new Set(entries.map((entry) => entry.request_id)).size;
-    return { credits, usd: creditsToUsd(credits), requestCount, eventCount: entries.length };
-  }, [entries]);
+  const totals = useMemo(() => summarizeUsageLedgerEntries(entries, { billableOnly: true }), [entries]);
 
   const chartData = useMemo(
     () =>
@@ -524,16 +540,22 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
           </Title>
         </Card>
         <Card className="rounded-lg border border-slate-200 shadow-sm" bodyStyle={{ padding: 16 }}>
-          <Text type="secondary">Credits</Text>
+          <Text type="secondary">Billable credits</Text>
           <Title level={3} className="!mb-0 !mt-1">
             {formatCredits(totals.credits)}
           </Title>
+          <Text type="secondary" className="text-xs">
+            settle + manual_adjust（{formatNumber(totals.billableEventCount, 0)} 条）
+          </Text>
         </Card>
         <Card className="rounded-lg border border-slate-200 shadow-sm" bodyStyle={{ padding: 16 }}>
           <Text type="secondary">USD estimate</Text>
           <Title level={3} className="!mb-0 !mt-1">
             {formatUsd(totals.usd)}
           </Title>
+          <Text type="secondary" className="text-xs">
+            内部核算 {formatUsd(CREDIT_USD_RATE)} / credit
+          </Text>
         </Card>
       </div>
 
@@ -542,7 +564,10 @@ function CodePlanUsageLedgerManager({ accessToken }: { accessToken?: string | nu
           <Title level={4} className="!mb-0 !text-base">
             聚合趋势
           </Title>
-          <Text type="secondary">按当前筛选条件聚合，USD 按 {formatUsd(CREDIT_USD_RATE)} / credit 估算。</Text>
+          <Text type="secondary">
+            默认与后端一致按 settle + manual_adjust 聚合；USD 为内部核算估算（{formatUsd(CREDIT_USD_RATE)} /
+            credit），非上游真实账单。
+          </Text>
         </div>
         {chartData.length ? (
           <AreaChart
