@@ -23,6 +23,7 @@ FIVE_HOURS_SECONDS = 5 * 60 * 60
 WEEK_SECONDS = 7 * 24 * 60 * 60
 MONTH_SECONDS = 30 * 24 * 60 * 60
 PENDING_USAGE_TIMEOUT_SECONDS = 15 * 60
+MAX_RESERVATION_OVERDRAFT_RATIO = 0.1
 
 
 class QuotaExceededError(Exception):
@@ -73,6 +74,10 @@ def calculate_credits(usage: CreditUsage, multipliers: CreditMultipliers) -> flo
 
 def reserve_usage(input_usage: CreditUsage, default_max_output_tokens: int) -> CreditUsage:
     return CreditUsage(input_tokens=input_usage.input_tokens, output_tokens=default_max_output_tokens)
+
+
+def reservation_overdraft_allowance(window: QuotaWindow) -> float:
+    return window.limit * MAX_RESERVATION_OVERDRAFT_RATIO
 
 
 def settlement_usage_for_failure(
@@ -316,11 +321,32 @@ class InMemoryQuotaStore:
 
     async def reserve(self, request: QuotaReserveRequest, reserved_credits: float) -> QuotaDecision:
         event_key = (request.subscription_id, request.request_id, QuotaEventType.RESERVE)
+        reservation_key = (request.subscription_id, request.request_id)
         if event_key in self.events:
-            return self.events[event_key].model_copy(update={"idempotent": True})
+            previous = self.events[event_key]
+            if reservation_key not in self.reservations:
+                return previous.model_copy(
+                    update={
+                        "allowed": False,
+                        "idempotent": True,
+                        "reason": "Quota request already finalized",
+                    }
+                )
+            return previous.model_copy(update={"idempotent": True})
 
-        balances_before = self._balances_before(request.subscription_id, request.windows)
-        if any(balance <= 0 for balance in balances_before.values()):
+        window_spend = tuple(
+            (
+                window,
+                self.spent.get((request.subscription_id, window.name, window.period_id), 0.0),
+            )
+            for window in request.windows
+        )
+        balances_before = {window.name: window.limit - spent for window, spent in window_spend}
+        exceeds_limit = any(
+            spent >= window.limit or spent + reserved_credits > window.limit + reservation_overdraft_allowance(window)
+            for window, spent in window_spend
+        )
+        if exceeds_limit:
             decision = QuotaDecision(
                 allowed=False,
                 request_id=request.request_id,
@@ -330,7 +356,7 @@ class InMemoryQuotaStore:
                 credits=reserved_credits,
                 balances_before=balances_before,
                 balances_after=balances_before,
-                reason="Code Plan quota exhausted",
+                reason="Code Plan quota reservation exceeds limit",
             )
             return decision
 
@@ -338,7 +364,6 @@ class InMemoryQuotaStore:
             key = (request.subscription_id, window.name, window.period_id)
             self.spent[key] = self.spent.get(key, 0.0) + reserved_credits
         balances_after = self._balances_before(request.subscription_id, request.windows)
-        reservation_key = (request.subscription_id, request.request_id)
         self.reservations[reservation_key] = {
             "request_id": request.request_id,
             "subscription_id": request.subscription_id,

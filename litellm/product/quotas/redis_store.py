@@ -17,6 +17,7 @@ from litellm.product.quotas.service import (
     FIVE_HOURS_SECONDS,
     PENDING_USAGE_TIMEOUT_SECONDS,
     anchored_windows_after_first_success,
+    reservation_overdraft_allowance,
 )
 
 RESERVE_LUA = """
@@ -24,6 +25,10 @@ local event_value = redis.call("GET", KEYS[1])
 if event_value then
   local decision = cjson.decode(event_value)
   decision["idempotent"] = true
+  if not redis.call("GET", KEYS[2]) then
+    decision["allowed"] = false
+    decision["reason"] = "Quota request already finalized"
+  end
   return cjson.encode(decision)
 end
 
@@ -36,7 +41,8 @@ local project_id = ARGV[6]
 local window_names = cjson.decode(ARGV[7])
 local n = tonumber(ARGV[8])
 local limits_index = 9
-local ends_index = limits_index + n
+local allowances_index = limits_index + n
+local ends_index = allowances_index + n
 local balances_before = {}
 local balances_after = {}
 local allowed = true
@@ -45,9 +51,10 @@ for i = 1, n do
   local window_key = KEYS[i + 2]
   local current = tonumber(redis.call("GET", window_key) or "0")
   local limit = tonumber(ARGV[limits_index + i - 1])
+  local allowance = tonumber(ARGV[allowances_index + i - 1])
   local balance = limit - current
   balances_before[window_names[i]] = balance
-  if balance <= 0 then
+  if current >= limit or current + credits > limit + allowance then
     allowed = false
   end
 end
@@ -63,7 +70,7 @@ if not allowed then
     balances_before = balances_before,
     balances_after = balances_before,
     idempotent = false,
-    reason = "Code Plan quota exhausted",
+    reason = "Code Plan quota reservation exceeds limit",
     metadata = {}
   }
   return cjson.encode(decision)
@@ -481,6 +488,7 @@ class RedisQuotaStore:
             json.dumps([window.name for window in request.windows]),
             str(len(request.windows)),
             *[str(window.limit) for window in request.windows],
+            *[str(reservation_overdraft_allowance(window)) for window in request.windows],
             *[str(window.period_end_epoch) for window in request.windows],
         ]
 

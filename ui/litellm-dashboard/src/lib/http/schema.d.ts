@@ -33877,10 +33877,19 @@ export interface components {
             /** Data */
             data: components["schemas"]["UsageLedgerRecord"][];
             /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+            /** Limit */
+            limit?: number | null;
+            /**
              * Object
              * @default list
              */
             object: string;
+            /** Offset */
+            offset?: number | null;
         };
         /** UsageLedgerManualAdjustRequest */
         UsageLedgerManualAdjustRequest: {
@@ -33894,6 +33903,8 @@ export interface components {
             model?: string | null;
             /** Project Id */
             project_id?: string | null;
+            /** Reason */
+            reason: string;
             /** Request Id */
             request_id: string;
             /**
@@ -54149,6 +54160,7 @@ export interface operations {
     list_usage_ledger_v1_admin_usage_ledger_get: {
         parameters: {
             query?: {
+                request_id?: string | null;
                 subscription_id?: string | null;
                 project_id?: string | null;
                 user_id?: string | null;
@@ -54157,6 +54169,7 @@ export interface operations {
                 start_time?: string | null;
                 end_time?: string | null;
                 limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -54221,6 +54234,7 @@ export interface operations {
         parameters: {
             query?: {
                 group_by?: components["schemas"]["UsageLedgerGroupBy"];
+                request_id?: string | null;
                 subscription_id?: string | null;
                 project_id?: string | null;
                 user_id?: string | null;

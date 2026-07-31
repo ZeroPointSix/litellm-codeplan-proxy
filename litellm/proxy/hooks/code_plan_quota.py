@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import time
+from collections.abc import Callable
 from uuid import uuid4
 
 from fastapi import HTTPException, status
+from pydantic import TypeAdapter, ValidationError
 
 import litellm
 from litellm._logging import verbose_proxy_logger
@@ -33,12 +36,14 @@ from litellm.types.utils import CallTypesLiteral
 CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY = "code_plan_quota_reservation"
 CODE_PLAN_QUOTA_SETTLED_METADATA_KEY = "_code_plan_quota_settled"
 CODE_PLAN_REQUEST_ID_METADATA_KEY = "code_plan_request_id"
+_CODE_PLAN_REQUEST_ID_SIGNATURE_KEY = "_code_plan_request_id_signature"
 CODE_PLAN_QUOTA_PENDING_COMPENSATION_INTERVAL_SECONDS = 60
 CODE_PLAN_UNTRUSTED_WINDOW_METADATA_KEYS = (
     "code_plan_5h_anchor_epoch",
     "code_plan_5h_period_id",
 )
 DEFAULT_CHARS_PER_TOKEN = 4
+_REQUEST_METADATA_ADAPTER = TypeAdapter(dict[str, object])
 
 
 class _PROXY_CodePlanQuotaHandler(CustomLogger):
@@ -47,8 +52,11 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         quota_service: QuotaService | None = None,
         *,
         pending_compensation_interval_seconds: int | None = None,
+        request_id_factory: Callable[[], str] | None = None,
     ):
         self._quota_service = quota_service
+        self._request_id_factory = request_id_factory or (lambda: str(uuid4()))
+        self._request_id_signing_key = os.urandom(32)
         self._pending_compensation_interval_seconds = (
             pending_compensation_interval_seconds
             if pending_compensation_interval_seconds is not None
@@ -60,9 +68,9 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
         self,
         user_api_key_dict: UserAPIKeyAuth,
         cache: DualCache,
-        data: dict,
+        data: dict[str, object],
         call_type: CallTypesLiteral,
-    ) -> dict | None:
+    ) -> dict[str, object] | None:
         metadata = self._key_metadata(user_api_key_dict)
         if "code_plan_subscription_id" not in metadata:
             return None
@@ -74,11 +82,15 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
 
         await self._sweep_expired_pending_usage_if_due()
 
-        request_metadata = data.get("metadata")
-        if not isinstance(request_metadata, dict):
+        raw_request_metadata: object = data.get("metadata")
+        try:
+            request_metadata = _REQUEST_METADATA_ADAPTER.validate_python(raw_request_metadata)
+        except ValidationError:
             request_metadata = {}
-            data["metadata"] = request_metadata
-        request_id = self._request_id(request_metadata)
+        data["metadata"] = request_metadata
+        request_signature: object
+        request_signature = data.get(_CODE_PLAN_REQUEST_ID_SIGNATURE_KEY)
+        request_id = self._request_id(request_metadata, request_signature)
         input_usage = self._input_usage_from_data(data)
         multipliers = self._multipliers(metadata)
         quota_metadata = self._quota_window_metadata(metadata)
@@ -138,6 +150,7 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
             CODE_PLAN_REQUEST_ID_METADATA_KEY,
             request_id,
         )
+        data[_CODE_PLAN_REQUEST_ID_SIGNATURE_KEY] = self._sign_request_id(request_id)
         self._stash_value_in_metadata_channels(
             data,
             CODE_PLAN_QUOTA_RESERVATION_METADATA_KEY,
@@ -606,14 +619,18 @@ class _PROXY_CodePlanQuotaHandler(CustomLogger):
                     return parsed
         return 1
 
-    def _request_id(self, metadata: dict[str, object]) -> str:
-        request_id = (
-            metadata.get(CODE_PLAN_REQUEST_ID_METADATA_KEY)
-            or metadata.get("request_id")
-            or metadata.get("litellm_call_id")
-            or str(uuid4())
-        )
-        return str(request_id)
+    def _request_id(self, metadata: dict[str, object], signature: object) -> str:
+        request_id = metadata.get(CODE_PLAN_REQUEST_ID_METADATA_KEY)
+        if (
+            isinstance(request_id, str)
+            and isinstance(signature, str)
+            and hmac.compare_digest(signature, self._sign_request_id(request_id))
+        ):
+            return request_id
+        return self._request_id_factory()
+
+    def _sign_request_id(self, request_id: str) -> str:
+        return hmac.digest(self._request_id_signing_key, request_id.encode(), "sha256").hex()
 
     def _multipliers(self, metadata: dict[str, object]) -> CreditMultipliers:
         return CreditMultipliers(
