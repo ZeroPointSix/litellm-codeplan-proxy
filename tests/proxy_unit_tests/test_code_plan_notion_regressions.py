@@ -139,9 +139,11 @@ async def test_quota_hook_ignores_key_metadata_5h_anchor_injection(monkeypatch):
 @pytest.mark.asyncio
 async def test_quota_hook_pre_call_sweeps_expired_pending_usage(monkeypatch):
     store = InMemoryQuotaStore()
+    request_ids = iter(("req-pending-runtime", "req-next-runtime"))
     handler = _PROXY_CodePlanQuotaHandler(
         QuotaService(store),
         pending_compensation_interval_seconds=1,
+        request_id_factory=request_ids.__next__,
     )
     user_api_key = _UserKey(_hook_metadata())
     monkeypatch.setattr("litellm.proxy.hooks.code_plan_quota.litellm.token_counter", lambda **kwargs: 10)
@@ -175,9 +177,10 @@ async def test_quota_hook_pre_call_sweeps_expired_pending_usage(monkeypatch):
     )
 
     assert ("sub-1", "req-pending-runtime") not in store.reservations
-    assert store.events[("sub-1", "req-pending-runtime", QuotaEventType.EXPIRED)].metadata[
-        "reservation_state"
-    ] == "EXPIRED"
+    assert (
+        store.events[("sub-1", "req-pending-runtime", QuotaEventType.EXPIRED)].metadata["reservation_state"]
+        == "EXPIRED"
+    )
     assert store.events[("sub-1", "req-pending-runtime", QuotaEventType.COMPENSATED)].credits == 0
     assert _spent(store, "sub-1", "5h") == reserved
     assert ("sub-1", "req-next-runtime") in store.reservations
@@ -260,8 +263,4 @@ async def test_expired_pending_usage_is_compensated_and_releases_hold():
     assert [decision.event_type for decision in decisions] == [QuotaEventType.EXPIRED, QuotaEventType.COMPENSATED]
     assert decisions[-1].metadata["reservation_state"] == "COMPENSATED"
     assert ("sub-1", "req-pending-expire") not in store.reservations
-    assert sum(
-        amount
-        for (sub_id, _name, _period_id), amount in store.spent.items()
-        if sub_id == "sub-1"
-    ) == 0
+    assert sum(amount for (sub_id, _name, _period_id), amount in store.spent.items() if sub_id == "sub-1") == 0
